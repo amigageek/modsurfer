@@ -71,14 +71,19 @@ static WORD fft_data[2][kFFTSize];
 
 static UWORD samp_dom_freq[kNumSamples];
 
-WORD FIX_MPY(WORD a, WORD b) {
-	/* shift right one less bit (i.e. 15-1) */
-	LONG c = (a * b) >> 14;
-	/* last bit shifted out = rounding-bit */
-	b = c & 0x01;
-	/* last shift + rounding bit */
-	a = (c >> 1) + b;
-	return a;
+static WORD fix_mult(WORD a,
+                     WORD b) {
+  asm (
+    "muls.w  %1,%0;"        // c = a*b
+    "swap    %0;"           // c = a*b[15:0, 31:16]
+    "rol.l   #1,%0;"        // c = a*b[14:0, 31, 30:15]
+    "bpl     .no_carry_%=;" // branch if a*b[14] is 0
+    "addq.w  #1,%0;"        // c = a*b[30:15] + a*b[14]
+    ".no_carry_%=:;"
+    : "+d"(a), "+d"(b)
+  );
+
+  return a;
 }
 
 static Status analyze_samples() {
@@ -140,8 +145,8 @@ static Status analyze_samples() {
         for (UWORD i = m; i < kFFTSize; i += (level * 2)) {
           j = i + level;
 
-          WORD tr = FIX_MPY(wr, fft_data[kFFTReal][j]) - FIX_MPY(wi, fft_data[kFFTImag][j]);
-          WORD ti = FIX_MPY(wr, fft_data[kFFTImag][j]) + FIX_MPY(wi, fft_data[kFFTReal][j]);
+          WORD tr = fix_mult(wr, fft_data[kFFTReal][j]) - fix_mult(wi, fft_data[kFFTImag][j]);
+          WORD ti = fix_mult(wr, fft_data[kFFTImag][j]) + fix_mult(wi, fft_data[kFFTReal][j]);
           WORD qr = fft_data[kFFTReal][i] >> 1;
           WORD qi = fft_data[kFFTImag][i] >> 1;
 
