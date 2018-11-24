@@ -9,10 +9,6 @@
 
 #include <proto/graphics.h>
 
-#define kKeycodeEsc 0x45
-
-extern volatile UBYTE key_state[0x80];
-
 static VOID game_action_loop();
 static UBYTE read_mousex();
 
@@ -52,82 +48,69 @@ Status game_loop() {
 cleanup:
   return status;
 }
-#include <unistd.h> // FIXME
+
+#define kVolumeMax 0x40
+#define kNumFadeFrames 0x20
+#define kKeycodeEsc 0x45
+
 VOID game_action_loop() {
-  ULONG elapsed_us = 0;
-  ULONG next_step_at_us = 0;
-  UWORD beats_per_min = 125;
-  UWORD ticks_per_div = 6; // 0 (stop) to 32
+  UWORD beats_per_min = kDefaultBeatsPerMin;
+  UWORD ticks_per_div = kDefaultTicksPerDiv;
   UWORD next_step_idx = 0;
   WORD player_x = 0;
   ULONG camera_z = 0;
   UWORD camera_z_inc = 0;
-  UBYTE active_lane = 0;
   TrackStep* steps = track_get_steps();
-  UWORD num_steps = track_get_length();
+  UWORD last_step_idx = track_get_length() - kNumPaddingSteps - 1;
   UBYTE last_mousex = read_mousex();
   BOOL running = TRUE;
-  BOOL fading = TRUE;
-  UBYTE* song_pos = (UBYTE*)((ULONG)&mt_Enable - 4);
-  ModuleNonChip* nonchip = module_get_nonchip();
-  UBYTE curr_pat_idx = (UBYTE)-1;
-  TrackScore* scores = track_get_scores();
-
-  for (UWORD i = 0; i < ARRAY_NELEMS(key_state); ++ i) {
-    key_state[i] = 0;
-  }
+  UWORD fade_frames = kNumFadeFrames;
 
   system_acquire_control();
-
-  //sleep(1);
   gfx_draw_track();
-  //  sleep(1);
 
   mt_init(&custom, module_get_nonchip(), module_get_samples(), 0);
-  mt_mastervol(&custom, 16);
+  mt_mastervol(&custom, kVolumeMax);
 
   ms_HoldRows = kNumVisibleSteps - kNumStepsDelay;
   ms_SuppressSample = 0xFF;
   mt_Enable = 1;
 
-  while (running || fading) {
-    if (next_step_idx == num_steps) { // FIXME
-      running = FALSE;
-      fading = TRUE;
-    }
+  while (running || fade_frames) {
+    gfx_wait_vblank();
 
-    while ((mt_Enable == 1 && ms_StepCount > 0) ||
-           (mt_Enable == 0 && elapsed_us >= next_step_at_us)) { // FIXME: remove
-      TrackStep* step = &steps[next_step_idx + kNumStepsDelay];
+    while (ms_StepCount > 0) {
+      TrackStep* play_step = &steps[next_step_idx + kNumStepsDelay];
 
-      if (step->speed > 0) {
-        if (step->speed <= 0x20) {
-          ticks_per_div = step->speed;
+      if (play_step->speed > 0) {
+        if (play_step->speed <= 0x20) {
+          ticks_per_div = play_step->speed;
         }
         else {
-          beats_per_min = step->speed;
+          beats_per_min = play_step->speed;
         }
       }
 
       // Suppress the sample corresponding to the collectible block.
       // This is reset if the block is collected or the next step is reached.
-      UBYTE next_sample = (step + 1)->sample;
+      UBYTE next_sample = (play_step + 1)->sample;
 
       if (next_sample) {
         ms_SuppressSample = next_sample;
       }
 
-      // Pre/post-scale to keep division result within 16 bits.
-      ULONG next_step_us = ((5000000 / 2) / (UWORD)(beats_per_min * 2)) * ticks_per_div * 2;
-      next_step_at_us += next_step_us;
-
       // Recalculate per-frame Z increment to match step speed.
       camera_z_inc = (kBlockGapDepth * beats_per_min) / (UWORD)(125 * ticks_per_div);
-
       camera_z = next_step_idx * kBlockGapDepth;
+
       ++ next_step_idx;
       -- ms_StepCount;
 
+      if (next_step_idx == last_step_idx) {
+        mt_Enable = 0;
+        fade_frames = kNumFadeFrames;
+        running = FALSE;
+      }
     }
 
     UBYTE mousex = read_mousex();
@@ -136,11 +119,6 @@ VOID game_action_loop() {
     if (mouse_deltax != 0) {
       last_mousex = mousex;
       player_x += mouse_deltax;
-    }
-
-    if (key_state[kKeycodeEsc]) {
-      running = FALSE;
-      fading = TRUE;
     }
 
     player_x = MAX(-kLaneWidth, MIN(kLaneWidth, player_x));
@@ -152,23 +130,34 @@ VOID game_action_loop() {
       (kLaneWidth / 2), kLaneWidth,
     };
 
-    TrackStep* player_step = &steps[next_step_idx + kNumStepsDelay];
-    WORD* bound = (WORD*)&bounds[player_step->active_lane];
+    TrackStep* collect_step = &steps[next_step_idx + kNumStepsDelay];
+    WORD* bound = (WORD*)&bounds[collect_step->active_lane];
 
     if (player_x >= bound[0] && player_x <= bound[1]) {
-      player_step->collected = TRUE;
+      collect_step->collected = TRUE;
       ms_SuppressSample = 0xFF;
     }
 
-    if (fading) {
-      fading = gfx_fade_action(running);
+    if (fade_frames) {
+      -- fade_frames;
+
+      if (fade_frames & 1) {
+        gfx_fade_action(running);
+      }
+
+      if (! running) {
+        mt_mastervol(&custom, fade_frames * (kVolumeMax / kNumFadeFrames));
+      }
     }
 
     gfx_update_display(&steps[next_step_idx], player_x, camera_z);
+
     camera_z += camera_z_inc;
 
-    elapsed_us += 20000; // 16667
-    gfx_wait_vblank();
+    if (key_state[kKeycodeEsc]) {
+      running = FALSE;
+      fade_frames = kNumFadeFrames;
+    }
   }
 
   mt_Enable = 0;
@@ -182,6 +171,11 @@ static UBYTE read_mousex() {
 }
 
 #if 0 // FIXME
+  UBYTE* song_pos = (UBYTE*)((ULONG)&mt_Enable - 4);
+  ModuleNonChip* nonchip = module_get_nonchip();
+  UBYTE curr_pat_idx = (UBYTE)-1;
+  TrackScore* scores = track_get_scores();
+
       UBYTE pat_idx = nonchip->header.pat_tbl[*song_pos];
 
       if (pat_idx != curr_pat_idx) {

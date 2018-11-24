@@ -12,3 +12,5 @@ extern VOID system_append_path(STRPTR base,
                                STRPTR subdir);
 extern VOID system_acquire_control();
 extern VOID system_release_control();
+
+extern volatile UBYTE key_state[0x80];

@@ -178,7 +178,9 @@ VOID gfx_fade_menu(BOOL fade_in) {
       SetRGB4(&g.screen->ViewPort, color_indices[i], color >> 8, (color >> 4) & 0xF, color & 0xF);
     }
 
-    gfx_wait_vblank();
+    for (UWORD i = 0; i < 2; ++ i) {
+      gfx_wait_vblank();
+    }
   }
 }
 

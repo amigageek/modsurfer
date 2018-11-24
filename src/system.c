@@ -229,6 +229,11 @@ VOID system_release_control() {
 
   // Enable task switching after restoring the view.
   Permit();
+
+  // Keyboard handler now removed, clear any remaining state.
+  for (UWORD i = 0; i < ARRAY_NELEMS(key_state); ++ i) {
+    key_state[i] = 0;
+  }
 }
 
 static ULONG get_vbr() {

@@ -44,13 +44,13 @@ cleanup:
   return status;
 }
 
-static Status pad_visible() {
+static Status pad_visible(BOOL lead_in) {
   Status status = StatusOK;
 
-  TrackStep step = (TrackStep){ 0 };
-  step.speed = 0;
+  UWORD num_steps = lead_in ? kNumVisibleSteps : kNumPaddingSteps;
+  TrackStep step = { 0 };
 
-  for (UWORD i = 0; i < kNumVisibleSteps; ++ i) {
+  for (UWORD i = 0; i < num_steps; ++ i) {
     // Reallocate track data if song length exceeds the last granule.
     if ((g.track_length & (kTrackDataLengthGranule - 1)) == 0) {
       CHECK(track_realloc());
@@ -104,20 +104,6 @@ static Status analyze_samples() {
       // FIXME
     }
 
-#if 0
-    char n[20];
-    sprintf(n, "sample%lu.dat", (ULONG)(samp_idx + 1));
-    FILE* f = fopen(n, "wb");
-    for (UWORD data_idx = 0; data_idx < kFFTSize*2; ++ data_idx) {
-      char v = 0;
-      if (data_idx < samp_size_b) {
-        v = samples[data_idx];
-      }
-      fputc(v, f);
-    }
-    fclose(f);
-#endif
-
     // Real FFT to half-size complex FFT, decimation in time, bytes to words.
     for (UWORD data_idx = 0; data_idx < kFFTSize; ++ data_idx) {
       WORD value_real = 0;
@@ -160,7 +146,6 @@ static Status analyze_samples() {
       -- k;
     }
 
-#if 1
     LONG max_ampl_sqr = 0;
     UWORD max_freq_idx = 0;
 
@@ -175,48 +160,7 @@ static Status analyze_samples() {
       }
     }
 
-    if (samp_idx == (7 - 1)) {
-      FILE* f = fopen("sample.bin", "wb");
-      for (UWORD i = 0; i < kFFTSize / 2; ++ i) {
-        LONG ampl_sqr =
-          ((fft_data[kFFTReal][i] * fft_data[kFFTReal][i]) >> 1) +
-          ((fft_data[kFFTImag][i] * fft_data[kFFTImag][i]) >> 1);
-
-        // FIXME: check for overflow
-        UWORD tmp = (UWORD)(ampl_sqr >> 15);
-        fwrite(&tmp, 2, 1, f);
-      }
-      fclose(f);
-    }
-
     samp_dom_freq[samp_idx] = max_freq_idx;
-#else
-    static ULONG ampls_sqr[kFFTSize / 2];
-    ULONG total_ampl_sqr = 0;
-
-    for (UWORD i = 1; i < kFFTSize / 2; ++ i) {
-      ULONG ampl_sqr =
-        ((fft_data[kFFTReal][i] * fft_data[kFFTReal][i]) >> 8) +
-        ((fft_data[kFFTImag][i] * fft_data[kFFTImag][i]) >> 8);
-
-      ampls_sqr[i] = ampl_sqr;
-      total_ampl_sqr += ampl_sqr;
-    }
-
-    ULONG median_ampl_sqr = total_ampl_sqr / 2;
-    UWORD median_freq_idx = 0;
-    total_ampl_sqr = 0;
-
-    for (median_freq_idx = 1; median_freq_idx < kFFTSize / 2; ++ median_freq_idx) {
-      total_ampl_sqr += ampls_sqr[median_freq_idx];
-
-      if (total_ampl_sqr > median_ampl_sqr) {
-        break;
-      }
-    }
-
-    samp_dom_freq[samp_idx] = median_freq_idx;
-#endif
 
     samples += samp_size_b;
 
@@ -484,13 +428,6 @@ static Status walk_pattern(UWORD pat_idx,
       *last_active_lane = 0;
     }
 
-#if 0
-    // FIXME: compiler bug?
-    if (block_in_step && g.track_length < 1) {
-      printf("%lu\n", (ULONG)step->active_lane);
-    }
-#endif
-
     // Handle commands which change the next division step or speed.
     UBYTE speed = 0;
 
@@ -553,7 +490,7 @@ static Status walk_song_table() {
   UWORD div_start_idx = 0;
   UWORD last_active_lane = 0;
 
-  for (UWORD pat_tbl_idx = kSongStartPos; pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
+  for (UWORD pat_tbl_idx = 0; pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
     UWORD pat_idx = nonchip->header.pat_tbl[pat_tbl_idx];
 
     // Stop if we looped in the pattern table.
@@ -582,13 +519,13 @@ Status track_build() {
 
   // Start with empty steps covering the visible track.
   // Match the speed to the beginning of the song. // FIXME
-  CHECK(pad_visible());
+  CHECK(pad_visible(TRUE));
 
   // Create steps for every division in the song, in playback order.
   CHECK(walk_song_table());
 
   // Finish with empty steps covering the visible track.
-  CHECK(pad_visible());
+  CHECK(pad_visible(FALSE));
 
 cleanup:
   if (status == StatusError) {
