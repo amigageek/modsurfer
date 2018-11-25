@@ -10,6 +10,7 @@ static struct {
   TrackStep* track_steps;
   ULONG track_steps_size;
   ULONG track_length;
+  UWORD track_num_blocks;
   ULONG pat_select_samples[kNumPatternsMax];
   TrackScore scores[kNumPatternsMax];
 } g;
@@ -421,6 +422,8 @@ static Status walk_pattern(UWORD pat_idx,
         step->active_lane = 1 + (prng() % 3); // FIXME: optimize
         *last_active_lane = step->active_lane;
       }
+
+      ++ g.track_num_blocks;
     }
     else {
       step->active_lane = 0;
@@ -513,6 +516,7 @@ Status track_build() {
 
   CHECK(g.track_steps == NULL);
   g.track_length = 0;
+  g.track_num_blocks = 0;
 
   // Select samples in each pattern corresponding to collectibles.
   CHECK(select_samples());
@@ -549,6 +553,10 @@ TrackStep* track_get_steps() {
 
 ULONG track_get_length() {
   return g.track_length;
+}
+
+UWORD track_get_num_blocks() {
+  return g.track_num_blocks;
 }
 
 TrackScore* track_get_scores() {

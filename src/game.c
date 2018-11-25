@@ -65,9 +65,11 @@ VOID game_action_loop() {
   UBYTE last_mousex = read_mousex();
   BOOL running = TRUE;
   UWORD fade_frames = kNumFadeFrames;
+  UWORD num_blocks = track_get_num_blocks();
+  UWORD score = 0;
 
-  system_acquire_control();
   gfx_draw_track();
+  system_acquire_control();
 
   mt_init(&custom, module_get_nonchip(), module_get_samples(), 0);
   mt_mastervol(&custom, kVolumeMax);
@@ -133,9 +135,10 @@ VOID game_action_loop() {
     TrackStep* collect_step = &steps[next_step_idx + kNumStepsDelay];
     WORD* bound = (WORD*)&bounds[collect_step->active_lane];
 
-    if (player_x >= bound[0] && player_x <= bound[1]) {
+    if ((! collect_step->collected) && player_x >= bound[0] && player_x <= bound[1]) {
       collect_step->collected = TRUE;
       ms_SuppressSample = 0xFF;
+      ++ score;
     }
 
     if (fade_frames) {
@@ -150,7 +153,8 @@ VOID game_action_loop() {
       }
     }
 
-    gfx_update_display(&steps[next_step_idx], player_x, camera_z);
+    UWORD score_frac = (score * 1000) / num_blocks;
+    gfx_update_display(&steps[next_step_idx], player_x, camera_z, score_frac);
 
     camera_z += camera_z_inc;
 

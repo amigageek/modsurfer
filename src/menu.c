@@ -98,7 +98,7 @@ Status menu_init() {
 
   OwnBlitter();
   gfx_draw_logo();
-  gfx_draw_score(0);
+  gfx_init_score();
   ASSERT(refresh_file_list());
   DisownBlitter();
 

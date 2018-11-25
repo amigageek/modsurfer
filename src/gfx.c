@@ -19,7 +19,7 @@
 #define kDispFetchStop ((kDispFetchX / 0x2) - kDispRes + (0x8 * ((kDispWidth / 0x10) - 1)))
 #define kDrawHeight 204// ((4 * kDispHeight) / 5)
 #define kDrawTop (kDispHeight - kDrawHeight)
-#define kDispCopSizeWords (100 + (kDispDepth * 4) + ((kDrawHeight + 1) * 16))
+#define kDispCopSizeWords (364 + ((kDrawHeight + 1) * 16))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 3
@@ -36,11 +36,14 @@ static VOID make_bitmap();
 static Status make_screen();
 static Status make_window();
 static Status make_copperlists();
+static UWORD* make_copperlist_score(UWORD* cl);
 static Status make_view();
 static VOID make_sprites();
 static VOID make_z_incs();
 static VOID get_display_window(struct ViewPort* viewport, UWORD* diwstrt, UWORD* diwstop, UWORD* diwhigh);
 static VOID update_sprites(UWORD player_x);
+static VOID update_score(UWORD* cop_list,
+                         UWORD score_frac);
 static BOOL fade_common(UWORD* colors_lo,
                         UWORD* colors_hi,
                         UWORD num_colors,
@@ -52,7 +55,8 @@ static struct {
   struct Window* window;
   struct cprlist cpr_list;
   UWORD cop_list_spr_idx;
-  UWORD cop_list_dyn_idx;
+  UWORD cop_list_rows_idx;
+  UWORD cop_list_score_idx;
   struct View view;
   WORD z_incs[kDrawHeight];
   UWORD colors[kFadeActionNumColors];
@@ -154,11 +158,9 @@ VOID gfx_draw_title(STRPTR title) {
   gfx_draw_text(title, -1, text_left, kHeaderTextTop, kHeaderTextPen, TRUE);
 }
 
-VOID gfx_draw_score(ULONG score) {
-  STRPTR text = "0000000";
-
+VOID gfx_init_score() {
   UWORD left = (kDispWidth + kHeaderTextGap) / 2;
-  gfx_draw_text(text, -1, left, kHeaderTextTop, kHeaderTextPen, TRUE);
+  gfx_draw_text("  0.0%", -1, left, kHeaderTextTop, kHeaderTextPen, TRUE);
 }
 
 #define kFadeMenuNumColors 5
@@ -260,26 +262,30 @@ VOID gfx_draw_track() {
 
   UWORD colors[] = { 4, 4, 4, 4, 5, 5, 6, 6, 7, 7 };
 
-  for (UWORD i = 0; i < ARRAY_NELEMS(near_sx); ++ i) {
-    for (UWORD plane = 0; plane < kDispDepth; ++ plane) {
-      if (colors[i] & (1 << plane)) {
-        blit_line(&disp_planes[plane][0][0], kDispStride, far_sx[i] + (kDispWidth / 2),
+  for (WORD plane_idx = kDispDepth - 1; plane_idx >= 0; -- plane_idx) {
+  // FIXME reversed loop pending palette change
+    UWORD* plane = &disp_planes[plane_idx][0][0];
+
+    for (UWORD i = 0; i < ARRAY_NELEMS(near_sx); ++ i) {
+      if (colors[i] & (1 << plane_idx)) {
+        blit_line(plane, kDispStride, far_sx[i] + (kDispWidth / 2),
                   kDrawTop, near_sx[i] + (kDispWidth / 2), kDispHeight - 1);
       }
     }
-  }
 
-   for (UWORD plane = 0; plane < kDispDepth; ++ plane) {
-     blit_fill(&disp_planes[plane][0][0], kDispStride, 0, kDrawTop, kDispWidth, kDrawHeight);
-   }
+    blit_fill(plane, kDispStride, 0, kDrawTop, kDispWidth, kDrawHeight);
+  }
 }
 
 VOID gfx_update_display(TrackStep *step_near,
                         WORD player_x,
-                        ULONG camera_z) {
+                        ULONG camera_z,
+                        UWORD score_frac) {
   static UWORD back_view_idx = 1;
   UWORD* cop_list = cop_lists[back_view_idx];
   back_view_idx ^= 1;
+
+  update_score(cop_list, score_frac);
 
   WORD camera_x = (player_x * 74) / 100;
   update_sprites((kDispWidth / 2) + (player_x - camera_x));
@@ -299,7 +305,7 @@ VOID gfx_update_display(TrackStep *step_near,
   WORD block_z_left = camera_z % kBlockGapDepth;
 
   UWORD* z_inc_ptr = g.z_incs;
-  UWORD* cop_line_ptr = &cop_list[g.cop_list_dyn_idx];
+  UWORD* cop_line_ptr = &cop_list[g.cop_list_rows_idx];
 
   for (UWORD draw_y = 0; draw_y < kDrawHeight; ++ draw_y) {
     WORD z_inc = *(z_inc_ptr ++);
@@ -343,18 +349,26 @@ VOID gfx_update_display(TrackStep *step_near,
   custom.cop1lc = (ULONG)cop_list;
 }
 
-#define kVBlankStart ((kDispWinY | 0x100) + 1)
-
 VOID gfx_wait_vblank() {
+  ULONG mask = (VPOSR_V8 << 0x10) | VHPOSR_VALL;
+  ULONG compare = ((kDispWinY | 0x100) + 1) << 0x8;
   ULONG vpos_vhpos;
 
   do {
     vpos_vhpos = *(volatile ULONG*)&custom.vposr;
-  } while ((vpos_vhpos & ((VPOSR_V8 << 0x10) | VHPOSR_VALL)) >= (kVBlankStart << 0x8));
+  } while ((vpos_vhpos & mask) >= compare);
 
   do {
     vpos_vhpos = *(volatile ULONG*)&custom.vposr;
-  } while ((vpos_vhpos & ((VPOSR_V8 << 0x10) | VHPOSR_VALL)) < (kVBlankStart << 0x8));
+  } while ((vpos_vhpos & mask) < compare);
+}
+
+VOID gfx_wait_blit() {
+  // Give blitter priority while we're waiting.
+  // Also takes care of dummy DMACON access to work around Agnus bug.
+  custom.dmacon = DMACON_SET | DMACON_BLITPRI;
+  while (custom.dmaconr & DMACONR_BBUSY);
+  custom.dmacon = DMACON_BLITPRI;
 }
 
 static VOID make_bitmap() {
@@ -459,7 +473,7 @@ static Status make_copperlists() {
 
   UWORD hdr_pal[] = { kHeaderPalette };
 
-  for (UWORD i = 0; i < ARRAY_NELEMS(hdr_pal); ++ i) {
+  for (UWORD i = 1; i < ARRAY_NELEMS(hdr_pal); ++ i) {
     *(cl ++) = mCustomOffset(color[i]);
     *(cl ++) = hdr_pal[i];
   }
@@ -510,12 +524,12 @@ static Status make_copperlists() {
   *(cl ++) = ((kDispWinY + kDispHdrHeight - 2) << 8) | 0x1;
   *(cl ++) = 0xFFFE;
 
-  for (UWORD i = 0; i < 8; ++ i) {
+  for (UWORD i = 1; i < 8; ++ i) {
     *(cl ++) = mCustomOffset(color[i]);
     *(cl ++) = 0;
   }
 
-  g.cop_list_dyn_idx = cl - cop_lists[0];
+  g.cop_list_rows_idx = cl - cop_lists[0];
 
   // One extra row to set modulus for first draw line.
   UWORD start_y = kDispWinY + kDrawTop - 1;
@@ -551,6 +565,10 @@ static Status make_copperlists() {
   *(cl ++) = mCustomOffset(bplcon0);
   *(cl ++) = BPLCON0_COLOR;
 
+  g.cop_list_score_idx = cl - cop_lists[0];
+
+  cl = make_copperlist_score(cl);
+
   *(cl ++) = 0xFFFF;
   *(cl ++) = 0xFFFE;
 
@@ -560,6 +578,69 @@ static Status make_copperlists() {
 
 cleanup:
   return status;
+}
+
+static UWORD* make_copperlist_score(UWORD* cl) {
+  APTR dst_row_base = gfx_display_planes() + (kHeaderTextTop * kDispStride);
+  UWORD left = (kDispWidth + kHeaderTextGap) / 2;
+
+  for (WORD char_idx = 4; char_idx >= 0; -- char_idx) {
+    if (char_idx == 3) {
+      continue;
+    }
+
+    UWORD dst_x = left + (char_idx * kFontSpacing);
+    UWORD start_x_word = dst_x >> 4;
+    UWORD end_x_word = ((dst_x + kFontWidth) + 0xF) >> 4;
+    UWORD width_words = end_x_word - start_x_word;
+
+    UWORD glyph_idx = (char_idx >= 2) ? 0x10 : 0;
+    ULONG src_start = (ULONG)font_planes + (glyph_idx << 1);
+    ULONG dst_start = (ULONG)dst_row_base + (start_x_word << 1);
+    UWORD shift = dst_x & 0xF;
+    UWORD right_word_mask = (width_words == 1 ? 0xF800 : 0);
+
+    for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
+      if (kHeaderTextPen & (1 << plane_idx)) {
+        *(cl ++) = 1;
+        *(cl ++) = 0;
+        *(cl ++) = mCustomOffset(bltcon0);
+        *(cl ++) = (shift << BLTCON0_ASH0_Shf) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | 0xCA;
+        *(cl ++) = mCustomOffset(bltcon1);
+        *(cl ++) = shift << BLTCON1_BSH0_Shf;
+        *(cl ++) = mCustomOffset(bltbmod);
+        *(cl ++) = (kFontNGlyphs * kBytesPerWord) - (width_words << 1);
+        *(cl ++) = mCustomOffset(bltcmod);
+        *(cl ++) = kDispStride - (width_words << 1);
+        *(cl ++) = mCustomOffset(bltdmod);
+        *(cl ++) = kDispStride - (width_words << 1);
+        *(cl ++) = mCustomOffset(bltafwm);
+        *(cl ++) = 0xF800;
+        *(cl ++) = mCustomOffset(bltalwm);
+        *(cl ++) = right_word_mask;
+        *(cl ++) = mCustomOffset(bltadat);
+        *(cl ++) = 0xFFFF;
+        *(cl ++) = mCustomOffset(bltbpt);
+        *(cl ++) = HI16(src_start);
+        *(cl ++) = mCustomOffset(bltbpt) + kBytesPerWord;
+        *(cl ++) = LO16(src_start);
+        *(cl ++) = mCustomOffset(bltcpt);
+        *(cl ++) = HI16(dst_start);
+        *(cl ++) = mCustomOffset(bltcpt) + kBytesPerWord;
+        *(cl ++) = LO16(dst_start);
+        *(cl ++) = mCustomOffset(bltdpt);
+        *(cl ++) = HI16(dst_start);
+        *(cl ++) = mCustomOffset(bltdpt) + kBytesPerWord;
+        *(cl ++) = LO16(dst_start);
+        *(cl ++) = mCustomOffset(bltsize);
+        *(cl ++) = (kFontHeight << BLTSIZE_H0_Shf) | width_words;
+      }
+
+      dst_start += kDispSlice;
+    }
+  }
+
+  return cl;
 }
 
 static Status make_view() {
@@ -640,8 +721,6 @@ static VOID update_sprites(UWORD player_x) {
   UWORD vstart = kDispWinY + y + ship_height;
   UWORD vstop = vstart + ship_height;
 
-  UWORD* sprite = ship_planes;
-
   UWORD spr_ctl_0 = (vstart & 0xFF) << SPRxPOS_SV0_Shf;
   UWORD spr_ctl_1 = ((vstop & 0xFF) << SPRxCTL_EV0_Shf) | ((vstart >> 8) << SPRxCTL_SV8_Shf) | ((vstop >> 8) << SPRxCTL_EV8_Shf);
 
@@ -651,5 +730,30 @@ static VOID update_sprites(UWORD player_x) {
 
     spr[0] = spr_ctl_0 | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_Shf);
     spr[1] = spr_ctl_1 | ((hstart & 0x1) << SPRxCTL_SH0_Shf) | ((spr_idx & 1) << SPRxCTL_ATT_Shf);
+  }
+}
+
+static VOID update_score(UWORD* cop_list,
+                         UWORD score_frac) {
+  UWORD* cl = &cop_list[g.cop_list_score_idx] + 19;
+
+  for (WORD char_idx = 0; char_idx < 4; ++ char_idx) {
+    UWORD glyph_idx = 0;
+
+    if (score_frac || char_idx < 2) {
+      glyph_idx = 0x10 + (score_frac % 10);
+      score_frac /= 10;
+    }
+
+    ULONG src_start = (ULONG)font_planes + (glyph_idx << 1);
+
+    for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
+      if (kHeaderTextPen & (1 << plane_idx)) {
+        cl[0] = HI16(src_start);
+        cl[2] = LO16(src_start);
+
+        cl += 32;
+      }
+    }
   }
 }

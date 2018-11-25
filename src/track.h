@@ -29,4 +29,5 @@ Status track_build();
 VOID track_free();
 TrackStep* track_get_steps();
 ULONG track_get_length();
+UWORD track_get_num_blocks();
 TrackScore* track_get_scores();

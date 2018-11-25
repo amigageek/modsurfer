@@ -37,12 +37,14 @@ extern VOID gfx_draw_text(STRPTR text,
                           BOOL replace_bg);
 extern VOID gfx_draw_logo();
 extern VOID gfx_draw_title(STRPTR title);
-extern VOID gfx_draw_score(ULONG score);
+extern VOID gfx_init_score();
 extern VOID gfx_fade_menu(BOOL fade_in);
 extern BOOL gfx_fade_action(BOOL fade_in);
 extern VOID gfx_clear_body();
 extern VOID gfx_draw_track();
 extern VOID gfx_update_display(TrackStep *step_near,
                                WORD player_x,
-                               ULONG camera_z);
+                               ULONG camera_z,
+                               UWORD score_frac);
 extern VOID gfx_wait_vblank();
+extern VOID gfx_wait_blit();

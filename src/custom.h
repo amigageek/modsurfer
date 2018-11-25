@@ -51,3 +51,4 @@ extern struct Custom custom;
 #define SPRxCTL_SV8_Shf  0x2
 #define SPRxCTL_EV8_Shf  0x1
 #define SPRxCTL_SH0_Shf  0x0
+#define COPCON_CDANG     0x2

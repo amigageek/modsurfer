@@ -30,6 +30,7 @@ static struct {
   struct copinit* old_copinit;
   UWORD old_intena;
   UWORD old_intreq;
+  UWORD old_copcon;
   ULONG old_veclev2;
 } g;
 
@@ -175,6 +176,13 @@ VOID system_acquire_control() {
   // Disable task switching before modifying the view.
   Forbid();
 
+  // Wait for any in-flight blits to complete.
+  gfx_wait_blit();
+
+  // Save/allow copper to access blitter.
+  g.old_copcon = custom.copcon;
+  custom.copcon = COPCON_CDANG;
+
   // Save active view and load our copperlist.
   g.old_view = GfxBase->ActiView;
   g.old_copinit = GfxBase->copinit;
@@ -226,6 +234,13 @@ VOID system_release_control() {
   // Restore original view and copperlist.
   custom.cop1lc = (ULONG)g.old_copinit;
   LoadView(g.old_view);
+
+  // Wait until copper-initiated blits have finished.
+  gfx_wait_vblank();
+  gfx_wait_blit();
+
+  // Restore copper access.
+  custom.copcon = g.old_copcon;
 
   // Enable task switching after restoring the view.
   Permit();

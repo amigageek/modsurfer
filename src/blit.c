@@ -2,14 +2,6 @@
 #include "custom.h"
 #include "gfx.h"
 
-static VOID wait_blit() {
-  // Give blitter priority while we're waiting.
-  // Also takes care of dummy DMACON access to work around Agnus bug.
-  custom.dmacon = DMACON_SET | DMACON_BLITPRI;
-  while (custom.dmaconr & DMACONR_BBUSY);
-  custom.dmacon = DMACON_BLITPRI;
-}
-
 VOID blit_copy(APTR src_base,
                UWORD src_stride_b,
                UWORD src_x,
@@ -58,7 +50,7 @@ VOID blit_copy(APTR src_base,
     right_word_mask = 0xFFFFU << MIN(0x10, ((start_x_word[0] + width_words) << 4) - (src_x + copy_w));
   }
 
-  wait_blit();
+  gfx_wait_blit();
 
   // A = Mask of bits inside copy region
   // B = Source data
@@ -103,7 +95,7 @@ VOID blit_rect(APTR dst_base,
     right_word_mask = 0xFFFFU << MIN(0x10, ((start_x_word + width_words) << 4) - (dst_x + width));
   }
 
-  wait_blit();
+  gfx_wait_blit();
 
   // A = Mask of bits inside copy region
   // B = hnused
@@ -137,7 +129,7 @@ VOID blit_line(APTR dst_base,
     ((((dx >= dy) && (y0 >= y1)) | ((dx < dy) && (x0 >= x1))) << 1) |
     ((dx >= dy) << 2);
 
-  wait_blit();
+  gfx_wait_blit();
 
   custom.bltcon0 = ((x0 & 0xF) << BLTCON0_ASH0_Shf) | BLTCON0_USEA | BLTCON0_USEC | BLTCON0_USED | (0xCA << BLTCON0_LF0_Shf);
   custom.bltcon1 =
@@ -186,7 +178,7 @@ VOID blit_fill(APTR dst_base,
     right_word_mask = 0xFFFFU << MIN(0x10, ((start_x_word + width_words) << 4) - (x + width));
   }
 
-  wait_blit();
+  gfx_wait_blit();
 
   // A = Mask of bits inside copy region
   // B = Source data
@@ -222,13 +214,13 @@ VOID blit_char(APTR font_base,
 
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     if (color & (1 << plane_idx)) {
-      wait_blit();
+      gfx_wait_blit();
 
       custom.bltcon0 = (shift << BLTCON0_ASH0_Shf) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | minterm;
       custom.bltcon1 = shift << BLTCON1_BSH0_Shf;
       custom.bltbmod = (kFontNGlyphs * kBytesPerWord) - (width_words << 1);
       custom.bltcmod = kDispStride - (width_words << 1);
-      custom.bltdmod = kDispStride - (width_words << 1);;
+      custom.bltdmod = kDispStride - (width_words << 1);
       custom.bltafwm = 0xF800;
       custom.bltalwm = right_word_mask;
       custom.bltadat = 0xFFFF;
