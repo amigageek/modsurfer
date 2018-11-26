@@ -22,14 +22,14 @@
 #define kDispCopSizeWords (364 + ((kDrawHeight + 1) * 16))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
-#define kHeaderTextPen 3
+#define kHeaderTextPen 5
 #define kPtrSprEdge 0x10
 #define kPtrSprOffX -6
 #define kPtrSprOffY -1
 #define kPlayerZ (kNearZ + (kNumStepsDelay * kBlockGapDepth))
 #define kBlockWidth ((3 * kLaneWidth) / 5)
 #define kStripeWidth 4
-#define kHeaderPalette 0x000, 0x425, 0x94A, 0xB8C
+#define kHeaderPalette 0xB8C, 0x425, 0x94A
 #define kFadeActionNumColors 8
 
 static VOID make_bitmap();
@@ -127,15 +127,25 @@ VOID gfx_draw_text(STRPTR text,
 }
 
 VOID gfx_draw_logo() {
+  // Two bitplane logo, shift colors [1,3] to [5,7].
+  //
+  // Display plane  Logo plane
+  // 0              0
+  // 1              1
+  // 2              0 | 1
+
   UWORD logo_plane_stride = logo_width / kBitsPerByte;
   UWORD logo_row_stride = logo_plane_stride * logo_depth;
 
   for (UWORD i = 0; i < logo_depth; ++ i) {
-    UBYTE* disp_plane = (UBYTE*)disp_planes + (i * kDispSlice);
     UBYTE* logo_plane = (UBYTE*)logo_planes + (i * logo_plane_stride);
 
-    blit_copy(logo_plane, logo_row_stride, 0, 0,
-              disp_plane, kDispStride, 0, 0, logo_width, logo_height, FALSE);
+    for (UWORD pass = 0; pass < 2; ++ pass) {
+      UBYTE* disp_plane = (UBYTE*)&disp_planes[pass == 0 ? i : 2][0][0];
+
+      blit_copy(logo_plane, logo_row_stride, 0, 0,
+                disp_plane, kDispStride, 0, 0, logo_width, logo_height, pass == 0, FALSE);
+    }
   }
 }
 
@@ -151,7 +161,9 @@ VOID gfx_draw_title(STRPTR title) {
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     if (kHeaderTextPen & (1 << plane_idx)) {
       UBYTE* plane = gfx_display_planes() + (plane_idx * kDispSlice);
-      blit_rect(plane, kDispStride, clear_left, kHeaderTextTop, clear_width, kFontHeight, FALSE);
+
+      blit_rect(plane, kDispStride, clear_left, kHeaderTextTop,
+                NULL, 0, 0, 0, clear_width, kFontHeight, FALSE);
     }
   }
 
@@ -166,7 +178,7 @@ VOID gfx_init_score() {
 #define kFadeMenuNumColors 5
 
 VOID gfx_fade_menu(BOOL fade_in) {
-  static UWORD color_indices[kFadeMenuNumColors] = { 4, 5, 6, 7, 18 };
+  static UWORD color_indices[kFadeMenuNumColors] = { 1, 2, 3, 4, 18 };
 
   UWORD colors_lo[kFadeMenuNumColors] = { 0x000 };
   UWORD colors_hi[kFadeMenuNumColors] = { 0x425, 0xB4C, 0xB8C, 0x5C5, 0xDB9 };
@@ -234,7 +246,8 @@ static BOOL fade_common(UWORD* colors_lo,
 
 VOID gfx_clear_body() {
   for (UWORD i = 0; i < kDispDepth; ++ i) {
-    blit_rect(&disp_planes[i][0][0], kDispStride, 0, kDrawTop, kDispWidth, kDrawHeight, FALSE);
+    blit_rect(&disp_planes[i][0][0], kDispStride, 0, kDrawTop,
+              NULL, 0, 0, 0, kDispWidth, kDrawHeight, FALSE);
   }
 }
 
@@ -260,10 +273,9 @@ VOID gfx_draw_track() {
     far_sx[i] = near_sx[i] / kFarNearRatio;
   }
 
-  UWORD colors[] = { 4, 4, 4, 4, 5, 5, 6, 6, 7, 7 };
+  UWORD colors[] = { 1, 1, 1, 1, 2, 2, 3, 3, 4, 4 };
 
-  for (WORD plane_idx = kDispDepth - 1; plane_idx >= 0; -- plane_idx) {
-  // FIXME reversed loop pending palette change
+  for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     UWORD* plane = &disp_planes[plane_idx][0][0];
 
     for (UWORD i = 0; i < ARRAY_NELEMS(near_sx); ++ i) {
@@ -410,7 +422,7 @@ static Status make_screen() {
 
   ShowTitle(g.screen, FALSE);
 
-  UWORD palette[1 << kDispDepth] = { kHeaderPalette };
+  UWORD palette[1 << kDispDepth] = { 0, 0, 0, 0, 0, kHeaderPalette };
   LoadRGB4(&g.screen->ViewPort, palette, ARRAY_NELEMS(palette));
   SetRGB4(&g.screen->ViewPort, 17, 0, 0, 0);
 
@@ -473,8 +485,8 @@ static Status make_copperlists() {
 
   UWORD hdr_pal[] = { kHeaderPalette };
 
-  for (UWORD i = 1; i < ARRAY_NELEMS(hdr_pal); ++ i) {
-    *(cl ++) = mCustomOffset(color[i]);
+  for (UWORD i = 0; i < ARRAY_NELEMS(hdr_pal); ++ i) {
+    *(cl ++) = mCustomOffset(color[i + 5]);
     *(cl ++) = hdr_pal[i];
   }
 
@@ -550,13 +562,13 @@ static Status make_copperlists() {
     *(cl ++) = 0;
     *(cl ++) = mCustomOffset(bplcon1);
     *(cl ++) = 0;
+    *(cl ++) = mCustomOffset(color[1]);
+    *(cl ++) = 0;
+    *(cl ++) = mCustomOffset(color[2]);
+    *(cl ++) = 0;
+    *(cl ++) = mCustomOffset(color[3]);
+    *(cl ++) = 0;
     *(cl ++) = mCustomOffset(color[4]);
-    *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[5]);
-    *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[6]);
-    *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[7]);
     *(cl ++) = 0;
   }
 

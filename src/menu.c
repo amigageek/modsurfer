@@ -47,10 +47,10 @@
 #define kFileInfoRight (kFrameX1 - kFrameWidth - kFramePad)
 #define kFileInfoWidth (kFileInfoRight - kFileInfoLeft + 1)
 
-#define kFramePen 4
-#define kDarkPen 5
-#define kLightPen 6
-#define kTextModPen 7
+#define kFramePen 1
+#define kDarkPen 2
+#define kLightPen 3
+#define kTextModPen 4
 
 static Status refresh_file_list();
 static Status mouse_pressed(UWORD mouse_x, UWORD mouse_y);
@@ -69,7 +69,7 @@ static VOID redraw_file_list(BOOL force_redraw);
 static VOID redraw_slider(BOOL force_redraw);
 static VOID redraw_mod_info();
 static VOID redraw_button(STRPTR text);
-static VOID redraw_file_list_highlight(UWORD entry, BOOL highlighted);
+static VOID redraw_file_list_highlight(UWORD entry_idx, BOOL highlighted);
 static VOID draw_file_list_row(dirlist_entry_t* entries, STRPTR names, UWORD row);
 static VOID draw_frames();
 static VOID draw_footer_text();
@@ -425,7 +425,9 @@ static VOID redraw_path() {
 
   for (UWORD i = 0; i < kDispDepth; ++ i) {
     UBYTE* plane = disp_planes + (i * kDispSlice);
-    blit_rect(plane, kDispStride, clear_left, clear_top, clear_width, clear_height, FALSE);
+
+    blit_rect(plane, kDispStride, clear_left, clear_top,
+              NULL, 0, 0, 0, clear_width, clear_height, FALSE);
   }
 
   STRPTR path_start = g.dir_path + MAX(0, string_length(g.dir_path) - kPathInfoMaxChars);
@@ -483,10 +485,11 @@ static VOID redraw_file_list(BOOL force_redraw) {
     if (copy_height > 0) {
       blit_copy(plane, kDispStride, redraw_left, copy_from_top,
                 plane, kDispStride, redraw_left, copy_to_top,
-                redraw_width, copy_height, (copy_from_top < copy_to_top));
+                redraw_width, copy_height, TRUE, (copy_from_top < copy_to_top));
     }
 
-    blit_rect(plane, kDispStride, redraw_left, clear_top, redraw_width, clear_height, FALSE);
+    blit_rect(plane, kDispStride, redraw_left, clear_top,
+              NULL, 0, 0, 0, redraw_width, clear_height, FALSE);
   }
 
   dirlist_entry_t* entries = dirlist_entries(&g.file_list);
@@ -563,11 +566,13 @@ static VOID redraw_slider(BOOL force_redraw) {
 
   for (UWORD plane_mask = 1; plane_mask < (1 << kDispDepth); plane_mask <<= 1) {
     if (clear_planes & plane_mask) {
-      blit_rect(plane, kDispStride, kSliderLeft, clear_top, kSliderWidth, clear_height, FALSE);
+      blit_rect(plane, kDispStride, kSliderLeft, clear_top,
+                NULL, 0, 0, 0, kSliderWidth, clear_height, FALSE);
     }
 
     if (draw_planes & plane_mask) {
-      blit_rect(plane, kDispStride, kSliderLeft, draw_top, kSliderWidth, draw_height, TRUE);
+      blit_rect(plane, kDispStride, kSliderLeft, draw_top,
+                NULL, 0, 0, 0, kSliderWidth, draw_height, TRUE);
     }
 
     plane += kDispSlice;
@@ -583,7 +588,8 @@ static VOID redraw_mod_info() {
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     if (kLightPen & (1 << plane_idx)) {
       UBYTE* plane = planes + (plane_idx * kDispSlice);
-      blit_rect(plane, kDispStride, kFileInfoLeft, kTableTop, kFileInfoWidth, kTableHeight, FALSE);
+      blit_rect(plane, kDispStride, kFileInfoLeft, kTableTop,
+                NULL, 0, 0, 0, kFileInfoWidth, kTableHeight, FALSE);
     }
   }
 
@@ -608,7 +614,8 @@ static VOID redraw_button(STRPTR text) {
     //if (kFramePen & (1 << plane_idx)) {
     BOOL draw = text && (kFramePen & (1 << plane_idx));
     UBYTE* plane = planes + (plane_idx * kDispSlice);
-    blit_rect(plane, kDispStride, kFrameX0, kFrameY0, kPlayButtonWidth, kPlayButtonHeight, draw);
+    blit_rect(plane, kDispStride, kFrameX0, kFrameY0,
+              NULL, 0, 0, 0, kPlayButtonWidth, kPlayButtonHeight, draw);
   }
 
   if (text) {
@@ -618,24 +625,23 @@ static VOID redraw_button(STRPTR text) {
   }
 }
 
-static VOID redraw_file_list_highlight(UWORD entry,
+static VOID redraw_file_list_highlight(UWORD entry_idx,
                                        BOOL highlighted) {
-  UBYTE* disp_planes = gfx_display_planes();
-  UBYTE* hl_plane = disp_planes + (2 * kDispSlice);
+  dirlist_entry_t* entries = dirlist_entries(&g.file_list);
+  dirlist_entry_t* entry = entries + entry_idx;
 
-  if (entry >= g.fl_entry_offset && entry < (g.fl_entry_offset + kTableNumRows)) {
-    UWORD row = entry - g.fl_entry_offset;
+  UBYTE* disp_planes = gfx_display_planes();
+  UBYTE* hl_plane = disp_planes + (0 * kDispSlice);
+  UBYTE* mask_plane = disp_planes + ((entry->type == EntryMod ? 2 : 1) * kDispSlice);
+
+  if (entry_idx >= g.fl_entry_offset && entry_idx < (g.fl_entry_offset + kTableNumRows)) {
+    UWORD row = entry_idx - g.fl_entry_offset;
     UWORD left = kFrameX1 + 1;
     UWORD top = kTableTop + (row * kTableRowHeight);
     UWORD width = (kFrameX2 - kFrameX1 + 1) - (2 * kFrameWidth);
 
-    blit_rect(hl_plane, kDispStride, left, top, width, kTableRowHeight, highlighted);
-
-    if (! highlighted) {
-      dirlist_entry_t* entries = dirlist_entries(&g.file_list);
-      STRPTR names = dirlist_names(&g.file_list);
-      draw_file_list_row(entries, names, row);
-    }
+    blit_rect(hl_plane, kDispStride, left, top,
+              mask_plane, kDispStride, left, top, width, kTableRowHeight, highlighted);
   }
 }
 
@@ -651,8 +657,6 @@ static VOID draw_file_list_row(dirlist_entry_t* entries,
   gfx_draw_text(name, kFileListMaxChars, kFileListLeft, top, entry_colors[entry->type], TRUE);
 }
 
-#include <stdio.h> // FIXME
-
 static VOID draw_frames() {
   static UWORD lines[][4] = {
     { kFrameX1, kFrameY0, kFrameX3, kFrameY0 },
@@ -664,7 +668,7 @@ static VOID draw_frames() {
     { kFrameX3, kFrameY0, kFrameX3, kFrameY2 },
   };
 
-  UBYTE* plane = gfx_display_planes() + (2 * kDispSlice);
+  UBYTE* plane = gfx_display_planes();
 
   for (UWORD i = 0; i < ARRAY_NELEMS(lines); ++ i) {
     UWORD* line = (UWORD*)&lines[i];
@@ -678,5 +682,5 @@ static VOID draw_footer_text() {
   UWORD left = (kDispWidth - (string_length(text) * kFontSpacing - 1)) / 2;
   UWORD top = kDispHeight - kFontHeight;
 
-  gfx_draw_text(text, -1, left, top, 6, TRUE);
+  gfx_draw_text(text, -1, left, top, kLightPen, TRUE);
 }

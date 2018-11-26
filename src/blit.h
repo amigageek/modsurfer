@@ -12,12 +12,17 @@ VOID blit_copy(APTR src_base,
                UWORD dst_y,
                UWORD copy_w,
                UWORD copy_h,
+               BOOL replace_bg,
                BOOL force_desc);
 
 VOID blit_rect(APTR dst_base,
                UWORD dst_stride_b,
                UWORD dst_x,
                UWORD dst_y,
+               APTR mask_base,
+               UWORD mask_stride_b,
+               UWORD mask_x,
+               UWORD mask_y,
                UWORD width,
                UWORD height,
                BOOL set_bits);
