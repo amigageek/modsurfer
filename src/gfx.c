@@ -55,10 +55,10 @@ static struct {
   struct Window* window;
   struct cprlist cpr_list;
   UWORD cop_list_spr_idx;
-  UWORD cop_list_rows_idx;
+  UWORD cop_list_rows_end;
   UWORD cop_list_score_idx;
   struct View view;
-  WORD z_incs[kDrawHeight];
+  UWORD z_incs[kDrawHeight];
   UWORD colors[kFadeActionNumColors];
 } g;
 
@@ -302,61 +302,66 @@ VOID gfx_update_display(TrackStep *step_near,
   WORD camera_x = (player_x * 74) / 100;
   update_sprites((kDispWidth / 2) + (player_x - camera_x));
 
-  WORD shift_start_x = - camera_x / kFarNearRatio;
-  WORD shift_end_x = - camera_x;
+  WORD shift_start_x = - camera_x;
+  WORD shift_end_x = - camera_x / kFarNearRatio;
   WORD shift_x = shift_start_x;
   WORD shift_err = 0;
   WORD slope = ((shift_end_x - shift_start_x) << 0xE) / kDrawHeight;
   UWORD shift_err_inc = ABS(slope);
   WORD shift_x_inc = (slope < 0) ? -1 : ((slope > 0) ? 1 : 0);
-  ULONG z = camera_z + kFarZ;
+  WORD prev_shift_w = 0;
+  ULONG z = camera_z + kNearZ;
 
-  UWORD mod_accum = 0;
-  TrackStep* step = step_near + kNumVisibleSteps;
-
-  WORD block_z_left = camera_z % kBlockGapDepth;
+  TrackStep* step = step_near;
+  UWORD step_frac = camera_z % kBlockGapDepth; // FIXME: overflow?
 
   UWORD* z_inc_ptr = g.z_incs;
-  UWORD* cop_line_ptr = &cop_list[g.cop_list_rows_idx];
+  UWORD* cop_row = &cop_list[g.cop_list_rows_end];
 
-  for (UWORD draw_y = 0; draw_y < kDrawHeight; ++ draw_y) {
-    WORD z_inc = *(z_inc_ptr ++);
+  for (WORD draw_y = kDrawHeight - 1; draw_y >= 0; -- draw_y) {
+    UWORD z_inc = *(z_inc_ptr ++);
     z += z_inc;
-    block_z_left += z_inc;
+    step_frac += z_inc;
 
-    WORD mod_inc = ((shift_x >> 4) << 1) - mod_accum;
-    mod_accum += mod_inc;
+    if (step_frac >= kBlockGapDepth) {
+      step_frac -= kBlockGapDepth;
+      ++ step;
+    }
 
-    cop_line_ptr[3] = (kDispRowPadW * 2) - 2 - mod_inc;
-    cop_line_ptr[5] = (kDispRowPadW * 2) - 2 - mod_inc;
-    cop_line_ptr += 16;
+    WORD shift_w = shift_x >> 4;
+    UWORD bplmod = (kDispRowPadW - 1 + (shift_w - prev_shift_w)) << 1;
+    prev_shift_w = shift_w;
+
+    cop_row -= 16;
+    cop_row[3] = bplmod;
+    cop_row[5] = bplmod;
+    cop_row[7] = (shift_x & 0xF) | ((shift_x & 0xF) << 4);
+    cop_row[9] = (z & 0x1000) ? g.colors[0] : 0x000;
+
+    UWORD lane_color = (step->collected ? g.colors[1] : g.colors[2]);
+    cop_row[11] = (step->active_lane == 1) ? lane_color : 0x000;
+    cop_row[13] = (step->active_lane == 2) ? lane_color : 0x000;
+    cop_row[15] = (step->active_lane == 3) ? lane_color : 0x000;
 
     UWORD disp_y = draw_y + (kDispHeight - kDrawHeight);
 
     if (disp_y == (0x100 - kDispWinY)) {
-      cop_line_ptr += 2;
+      cop_row -= 2;
     }
-
-    if (block_z_left <= 0) {
-      block_z_left += kBlockGapDepth;
-      -- step;
-    }
-
-    cop_line_ptr[7] = (shift_x & 0xF) | ((shift_x & 0xF) << 4);
-    cop_line_ptr[9] = (z & 0x1000) ? g.colors[0] : 0x000;
-
-    UWORD lane_color = (step->collected ? g.colors[1] : g.colors[2]);
-    cop_line_ptr[11] = (step->active_lane == 1) ? lane_color : 0x000;
-    cop_line_ptr[13] = (step->active_lane == 2) ? lane_color : 0x000;
-    cop_line_ptr[15] = (step->active_lane == 3) ? lane_color : 0x000;
 
     shift_err += shift_err_inc;
 
-    if (shift_err >= 0x2000) {
+    if (shift_err >= 0x2000) { // FIXME: while
       shift_x += shift_x_inc;
       shift_err -= 0x4000;
     }
   }
+
+  UWORD bplmod = (kDispRowPadW - 1 - prev_shift_w) << 1;
+
+  cop_row -= 16;
+  cop_row[3] = bplmod;
+  cop_row[5] = bplmod;
 
   custom.cop1lc = (ULONG)cop_list;
 }
@@ -541,8 +546,6 @@ static Status make_copperlists() {
     *(cl ++) = 0;
   }
 
-  g.cop_list_rows_idx = cl - cop_lists[0];
-
   // One extra row to set modulus for first draw line.
   UWORD start_y = kDispWinY + kDrawTop - 1;
   UWORD stop_y = kDispWinY + kDispHeight;
@@ -571,6 +574,8 @@ static Status make_copperlists() {
     *(cl ++) = mCustomOffset(color[4]);
     *(cl ++) = 0;
   }
+
+  g.cop_list_rows_end = cl - cop_lists[0];
 
   *(cl ++) = ((kDispWinY + kDispHeight - 0x100) << 8) | 0x1;
   *(cl ++) = 0xFFFE;
@@ -683,13 +688,14 @@ static VOID make_sprites() {
 }
 
 static VOID make_z_incs() {
-  UWORD prev_z = kFarZ;
+  UWORD prev_z = kNearZ;
 
-  for (UWORD draw_y = 0; draw_y < kDrawHeight; ++ draw_y) {
-    UWORD draw_y_frac = kNearZ + ((draw_y * (0x10000 - kNearZ)) / kDrawHeight);
+  for (UWORD i = 0; i < kDrawHeight; ++ i) {
+    UWORD draw_y = (kDrawHeight - 1) - i;
+    UWORD draw_y_frac = kNearZ + ((draw_y * (kFarZ - kNearZ)) / kDrawHeight);
     UWORD z = ((kNearZ - 1) << 0x10) / draw_y_frac;
 
-    g.z_incs[draw_y] = z - prev_z;
+    g.z_incs[i] = z - prev_z;
     prev_z = z;
   }
 }
