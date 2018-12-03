@@ -299,8 +299,9 @@ VOID gfx_update_display(TrackStep *step_near,
 
   update_score(cop_list, score_frac);
 
-  WORD camera_x = (player_x * 74) / 100;
-  update_sprites((kDispWidth / 2) + (player_x - camera_x));
+  WORD player_sx = (player_x * (kNumVisibleSteps - kNumStepsDelay)) / kNumVisibleSteps;
+  WORD camera_x = (player_sx * 74) / 100;
+  update_sprites((kDispWidth / 2) + (player_sx - camera_x));
 
   WORD shift_start_x = - camera_x;
   WORD shift_end_x = - camera_x / kFarNearRatio;
