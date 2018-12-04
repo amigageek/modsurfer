@@ -938,6 +938,16 @@ _mt_music:
 
 	; handle a new note
 	move.b	d7,mt_Counter(a4)
+
+	ifd	MODSURFER
+	addq.b	#1,ms_StepCount(a4)
+	cmp.b	#0,ms_HoldRows(a4)
+	beq	no_hold_row
+	subq.b	#1,ms_HoldRows(a4)
+	rts
+no_hold_row:
+	endc
+
 	tst.b	mt_PattDelTime2(a4)
 	beq	get_new_note
 
@@ -994,15 +1004,6 @@ get_new_note:
 	lsr.l	#6,d0
 	add.l	d0,a1			; pattern base
 	add.w	mt_PatternPos(a4),a1	; a1 pattern line
-
-	ifd	MODSURFER
-	addq.b	#1,ms_StepCount(a4)
-	cmp.b	#0,ms_HoldRows(a4)
-	beq	no_hold_row
-	subq.b	#1,ms_HoldRows(a4)
-	rts
-no_hold_row:
-	endc
 
 	; play new note for each channel, apply some effects
 	lea	AUD0LC(a6),a5

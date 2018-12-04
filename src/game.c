@@ -26,19 +26,20 @@ Status game_loop() {
       break;
     }
 
-    OwnBlitter(); // FIXME track_build might take time
-
     if (module_load_all()) {
       if (track_build()) {
+        OwnBlitter();
         gfx_fade_menu(FALSE);
         game_action_loop();
         track_free();
       }
       else {
+        OwnBlitter();
         gfx_draw_title("NOT ENOUGH MEMORY");
       }
     }
     else {
+      OwnBlitter();
       gfx_draw_title("NOT ENOUGH MEMORY");
     }
 
@@ -79,7 +80,9 @@ VOID game_action_loop() {
   mt_Enable = 1;
 
   while (running || fade_frames) {
+    /* custom.color[0] = 0x000; */
     gfx_wait_vblank();
+    /* custom.color[0] = 0xF00; */
 
     while (ms_StepCount > 0) {
       TrackStep* play_step = &steps[next_step_idx + kNumStepsDelay];
@@ -158,7 +161,7 @@ VOID game_action_loop() {
 
     camera_z += camera_z_inc;
 
-    if (key_state[kKeycodeEsc]) {
+    if (running && key_state[kKeycodeEsc]) {
       running = FALSE;
       fade_frames = kNumFadeFrames;
     }

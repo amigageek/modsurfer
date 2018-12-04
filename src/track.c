@@ -15,6 +15,8 @@ static struct {
   TrackScore scores[kNumPatternsMax];
 } g;
 
+// FIXME: test all effects
+
 #define kTrackDataAllocGranule 0x1000
 #define kTrackDataLengthGranule (kTrackDataAllocGranule / sizeof(TrackStep))
 #define kEffectPosJump     0xB
@@ -197,85 +199,14 @@ static UWORD prng() {
   return seed;
 }
 
-// 0 = treat command as new sample playback
-// 1 = skip command, sample does not restart
-// 2 = FIXME
-
-static UBYTE skip_commands[0x10] = {
-  0, /* Normal/arpeggio */
-  0, /* Slide up */
-  0, /* Slide down */
-  0, /* Slide to note */
-  0, /* Vibrato */
-  0, /* Continue slide to note, volume slide */
-  0, /* Continue vibrato, volume slide */
-  1, /* Tremolo */
-  2, /* Unused */
-  0, /* Set sample offset */
-  0, /* Volume slide */
-  1, /* Position jump */
-  3, /* Set volume */
-  1, /* Pattern break */
-  2, /* Extended */
-  0, /* Set speed */
-};
-
-static UBYTE skip_commands_ext[0x10] = {
-  0, /* Set filter on/off */
-  2, /* Fineslide up */
-  2, /* Fineslide down */
-  2, /* Set glissando on/off */
-  2, /* Set vibrato waveform */
-  2, /* Set finetune value */
-  2, /* Loop pattern */
-  2, /* Set tremolo waveform */
-  2, /* Unused */
-  2, /* Retrigger sample */
-  0, /* Fine volume slide up */
-  0, /* Fine volume slide down */
-  2, /* Cut sample */
-  0, /* Delay sample */
-  2, /* Delay pattern */
-  2, /* Invert loop*/
-};
-
 static BOOL skip_command(PatternCommand* cmd) {
-  if (cmd->parameter == 0) {
-    return TRUE;
+  BOOL skip = FALSE;
+
+  if (((cmd->effect >> 8) == 0xC) && ((cmd->effect & 0xFF) < 32)) {
+    skip = TRUE;
   }
 
-  UWORD effect_major = cmd->effect >> 8;
-
-  if (effect_major != 0xE) {
-    UBYTE ignore = skip_commands[effect_major];
-
-    if (ignore == 2) {
-      /* printf("effect %lX\n", cmd->effect); */
-      exit(1);
-    }
-
-    if (ignore == 1) {
-      return TRUE;
-    }
-
-    // FIXME: Make this part of the score!
-    if (ignore == 3 && (cmd->effect & 0xFF) < 32) {
-      return TRUE;
-    }
-
-    return FALSE;
-  }
-  else {
-    UWORD effect_ext = (cmd->effect >> 4) & 0xF;
-    UBYTE ignore = skip_commands_ext[effect_ext];
-
-    if (ignore == 2) {
-      /* printf("effect %lX\n", cmd->effect); */
-      exit(1);
-    }
-
-    return (ignore == 1);
-  }
+  return skip;
 }
 
 static Status select_samples() {
@@ -319,10 +250,11 @@ static Status select_samples() {
         }
 
         UBYTE sample = (cmd->sample_hi << 4) | cmd->sample_lo;
+        UWORD period = cmd->parameter;
 
-        if (sample) {
+        if (sample && period) {
           ++ sample_count[sample];
-          sample_periods[sample] += cmd->parameter;
+          sample_periods[sample] += period;
         }
       }
     }
@@ -384,8 +316,12 @@ static Status walk_pattern(UWORD pat_idx,
   UWORD div_idx = *div_start_idx;
   *div_start_idx = 0;
 
+  UWORD loop_idx = 0;
+  UWORD loop_count = -1;
+
   while (div_idx < kDivsPerPat) {
     PatternDivision* div = &pat->divisions[div_idx];
+    UWORD next_div_idx = div_idx + 1;
 
     // Reallocate track data if song length exceeds the last granule.
     if ((g.track_length & (kTrackDataLengthGranule - 1)) == 0) {
@@ -433,6 +369,7 @@ static Status walk_pattern(UWORD pat_idx,
 
     // Handle commands which change the next division step or speed.
     UBYTE speed = 0;
+    UBYTE delay = 0;
 
     for (ULONG cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
       UWORD effect = div->commands[cmd_idx].effect;
@@ -459,11 +396,31 @@ static Status walk_pattern(UWORD pat_idx,
         break;
 
       case kEffectExtend:
-        switch (effect >> 4) {
-        case kEffectExtPatLoop:
+        switch ((effect >> 4) & 0xF) {
         case kEffectExtPatDelay:
-          /* printf("Unsupported extension effect %lu\n", (ULONG)(effect & 0xF0)); */
-          CHECK(FALSE);
+          delay = effect & 0xF;
+          break;
+
+        case kEffectExtPatLoop: {
+          UWORD cmd_count = effect & 0xF;
+
+          if (cmd_count == 0) {
+            loop_idx = div_idx;
+          }
+          else if (loop_count == 0) {
+            loop_count = -1;
+          }
+          else {
+            if (loop_count == (UWORD)-1) {
+              loop_count = cmd_count;
+            }
+
+            -- loop_count;
+            next_div_idx = loop_idx;
+          }
+
+          break;
+        }
         }
       }
     }
@@ -471,7 +428,13 @@ static Status walk_pattern(UWORD pat_idx,
     step->speed = speed;
 
     ++ g.track_length;
-    ++ div_idx;
+    div_idx = next_div_idx;
+
+    for (UWORD i = 0; i < delay; ++ i) {
+      // FIXME: realloc with vector_append
+      g.track_steps[g.track_length] = (TrackStep){0};
+      ++ g.track_length;
+    }
   }
 
 cleanup:
