@@ -150,8 +150,11 @@ VOID gfx_draw_logo() {
 }
 
 VOID gfx_draw_title(STRPTR title) {
+  UWORD title_length;
+  for (title_length = 0; title_length < 20 && title[title_length]; ++ title_length) {}
+
   UWORD text_right = (kDispWidth - kHeaderTextGap) / 2;
-  UWORD text_width = string_length(title) * kFontSpacing - 1;
+  UWORD text_width = title_length * kFontSpacing - 1;
   UWORD text_left = text_right - text_width;
 
   UWORD max_width = kModTitleMaxLen * kFontSpacing - 1;
@@ -167,7 +170,7 @@ VOID gfx_draw_title(STRPTR title) {
     }
   }
 
-  gfx_draw_text(title, -1, text_left, kHeaderTextTop, kHeaderTextPen, TRUE);
+  gfx_draw_text(title, title_length, text_left, kHeaderTextTop, kHeaderTextPen, TRUE);
 }
 
 VOID gfx_init_score() {
