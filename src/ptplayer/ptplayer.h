@@ -12,6 +12,7 @@ extern VOID mt_end(APTR custom __asm("a6"));
 extern VOID mt_mastervol(APTR custom __asm("a6"),
                          UWORD MasterVolume __asm("d0"));
 extern VOID mt_music();
+extern UWORD ms_camera_z_inc(UWORD block_gap_depth __asm("d0"));
 
 extern volatile UBYTE mt_Enable;
 extern volatile UBYTE ms_StepCount;

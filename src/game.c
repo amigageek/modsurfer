@@ -55,8 +55,6 @@ cleanup:
 #define kKeycodeEsc 0x45
 
 VOID game_action_loop() {
-  UWORD beats_per_min = kDefaultBeatsPerMin;
-  UWORD ticks_per_div = kDefaultTicksPerDiv;
   UWORD next_step_idx = 0;
   WORD player_x = 0;
   ULONG camera_z = 0;
@@ -87,15 +85,6 @@ VOID game_action_loop() {
     while (ms_StepCount > 0) {
       TrackStep* play_step = &steps[next_step_idx + kNumStepsDelay];
 
-      if (play_step->speed > 0) {
-        if (play_step->speed <= 0x20) {
-          ticks_per_div = play_step->speed;
-        }
-        else {
-          beats_per_min = play_step->speed;
-        }
-      }
-
       // Suppress the sample corresponding to the collectible block.
       // This is reset if the block is collected or the next step is reached.
       UBYTE next_sample = (play_step + 1)->sample;
@@ -105,7 +94,7 @@ VOID game_action_loop() {
       }
 
       // Recalculate per-frame Z increment to match step speed.
-      camera_z_inc = (kBlockGapDepth * beats_per_min) / (UWORD)(125 * ticks_per_div);
+      camera_z_inc = ms_camera_z_inc(kBlockGapDepth);
       camera_z = next_step_idx * kBlockGapDepth;
 
       ++ next_step_idx;

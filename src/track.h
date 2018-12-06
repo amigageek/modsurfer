@@ -5,14 +5,11 @@
 #define kNumVisibleSteps 16
 #define kNumPaddingSteps (kNumVisibleSteps + 0x40) // 32 frame fade at speed 1 BPM 255
 #define kNumStepsDelay 1
-#define kDefaultBeatsPerMin 125
-#define kDefaultTicksPerDiv 6
 
 typedef struct {
   UBYTE active_lane:2;
   UBYTE collected:1;
   UBYTE sample:5;
-  UBYTE speed;
 } TrackStep;
 
 typedef struct {

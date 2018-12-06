@@ -22,7 +22,6 @@ static struct {
 #define kEffectPosJump     0xB
 #define kEffectPatBreak    0xD
 #define kEffectExtend      0xE
-#define kEffectSetSpeed    0xF
 #define kEffectExtPatLoop  0x6
 #define kEffectExtPatDelay 0xE
 
@@ -367,8 +366,7 @@ static Status walk_pattern(UWORD pat_idx,
       *last_active_lane = 0;
     }
 
-    // Handle commands which change the next division step or speed.
-    UBYTE speed = 0;
+    // Handle commands which change the next division step.
     UBYTE delay = 0;
 
     for (ULONG cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
@@ -389,10 +387,6 @@ static Status walk_pattern(UWORD pat_idx,
         }
 
         div_idx = kDivsPerPat;
-        break;
-
-      case kEffectSetSpeed:
-        speed = effect & 0xFF;
         break;
 
       case kEffectExtend:
@@ -424,8 +418,6 @@ static Status walk_pattern(UWORD pat_idx,
         }
       }
     }
-
-    step->speed = speed;
 
     ++ g.track_length;
     div_idx = next_div_idx;
@@ -485,7 +477,6 @@ Status track_build() {
   CHECK(select_samples());
 
   // Start with empty steps covering the visible track.
-  // Match the speed to the beginning of the song. // FIXME
   CHECK(pad_visible(TRUE));
 
   // Create steps for every division in the song, in playback order.

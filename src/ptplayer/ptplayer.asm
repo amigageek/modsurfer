@@ -516,6 +516,7 @@ mt_reset:
 	ifd	MODSURFER
 	clr.b	ms_StepCount(a4)
 	clr.b	ms_HoldRows(a4)
+	move.b	#125,ms_BeatsPerMin(a4)
 	endc
 
 	ifnd	SDATA
@@ -1953,6 +1954,11 @@ mt_setspeed:
 	move.b	d0,CIAB+CIATALO
 	lsr.w	#8,d0
 	move.b	d0,CIAB+CIATAHI
+
+	ifd	MODSURFER
+	move.b	d4,ms_BeatsPerMin(a4)
+	endc
+
 	rts
 
 
@@ -2244,6 +2250,17 @@ mt_updatefunk:
 
 .2:	rts
 
+	xdef _ms_camera_z_inc
+_ms_camera_z_inc:
+	;; camera_z_inc = (kBlockGapDepth * ms_BeatsPerMin) / (125 * mt_Speed)
+	lea	mt_data(pc),a0
+	moveq	#0,d1
+	move.b	ms_BeatsPerMin(a0),d1
+	mulu.w	d1,d0
+	move.b	mt_Speed(a0),d1
+	mulu.w	#125,d1
+	divu.w	d1,d0
+	rts
 
 mt_FunkTable:
 	dc.b	0,5,6,7,8,10,11,13,16,19,22,26,32,43,64,128
@@ -3015,6 +3032,7 @@ ms_StepCount	rs.b	1
 ms_HoldRows	rs.b	1
 ms_SuppressSample rs.b	1
 ms_SuppressNext	rs.b	1
+ms_BeatsPerMin	rs.b	1
 	endc
 
 mt_data:
@@ -3040,6 +3058,8 @@ _ms_HoldRows:
 _ms_SuppressSample:
 	ds.b	1
 _ms_SuppressNext:
+	ds.b	1
+_ms_BeatsPerMin:
 	ds.b	1
 	endc
 
