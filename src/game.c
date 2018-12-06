@@ -52,6 +52,7 @@ cleanup:
 
 #define kVolumeMax 0x40
 #define kNumFadeFrames 0x20
+#define kNumTimeoutFrames 200
 #define kKeycodeEsc 0x45
 
 VOID game_action_loop() {
@@ -64,7 +65,9 @@ VOID game_action_loop() {
   UBYTE last_mousex = read_mousex();
   BOOL running = TRUE;
   UWORD fade_frames = kNumFadeFrames;
+  UWORD timeout_frames = kNumTimeoutFrames;
   UWORD num_blocks = track_get_num_blocks();
+  UWORD num_blocks_passed = 0;
   UWORD score = 0;
 
   gfx_draw_track();
@@ -84,6 +87,10 @@ VOID game_action_loop() {
 
     while (ms_StepCount > 0) {
       TrackStep* play_step = &steps[next_step_idx + kNumStepsDelay];
+
+      if (play_step->active_lane) {
+        ++ num_blocks_passed;
+      }
 
       // Suppress the sample corresponding to the collectible block.
       // This is reset if the block is collected or the next step is reached.
@@ -150,7 +157,11 @@ VOID game_action_loop() {
 
     camera_z += camera_z_inc;
 
-    if (running && key_state[kKeycodeEsc]) {
+    if (num_blocks_passed == num_blocks) {
+      -- timeout_frames;
+    }
+
+    if (running && (key_state[kKeycodeEsc] || (timeout_frames == 0))) {
       running = FALSE;
       fade_frames = kNumFadeFrames;
     }
