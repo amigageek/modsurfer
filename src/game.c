@@ -14,10 +14,13 @@ static UBYTE read_mousex();
 
 Status game_loop() {
   Status status = StatusOK;
+  BOOL last_success = TRUE;
 
   while (TRUE) {
-    ASSERT(menu_redraw());
-    gfx_fade_menu(TRUE);
+    if (last_success) {
+      ASSERT(menu_redraw());
+      gfx_fade_menu(TRUE);
+    }
 
     Status menu_status = menu_event_loop();
     ASSERT(menu_status);
@@ -26,21 +29,17 @@ Status game_loop() {
       break;
     }
 
-    if (module_load_all()) {
-      if (track_build()) {
-        OwnBlitter();
-        gfx_fade_menu(FALSE);
-        game_action_loop();
-        track_free();
-      }
-      else {
-        OwnBlitter();
-        gfx_draw_title("NOT ENOUGH MEMORY");
-      }
+    last_success = module_load_all() && track_build();
+
+    OwnBlitter();
+
+    if (last_success) {
+      gfx_fade_menu(FALSE);
+      game_action_loop();
+      track_free();
     }
     else {
-      OwnBlitter();
-      gfx_draw_title("NOT ENOUGH MEMORY");
+      menu_redraw_button("NOT ENOUGH MEMORY");
     }
 
     DisownBlitter();

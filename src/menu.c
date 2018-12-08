@@ -68,7 +68,6 @@ static VOID redraw_path();
 static VOID redraw_file_list(BOOL force_redraw);
 static VOID redraw_slider(BOOL force_redraw);
 static VOID redraw_mod_info();
-static VOID redraw_button(STRPTR text);
 static VOID redraw_file_list_highlight(UWORD entry_idx, BOOL highlighted);
 static VOID draw_file_list_row(dirlist_entry_t* entries, STRPTR names, UWORD row);
 static VOID draw_frames();
@@ -125,12 +124,6 @@ Status menu_redraw() {
   redraw_body();
   draw_frames();
   draw_footer_text();
-
-#if 0
-  if (module_is_open()) {
-    redraw_button("START GAME");
-  }
-#endif
 
 cleanup:
   DisownBlitter();
@@ -346,7 +339,7 @@ static VOID check_mouse_pressed_slider(UWORD mouse_x,
 static BOOL check_mouse_pressed_start_button(UWORD mouse_x,
                                              UWORD mouse_y) {
   if (module_is_open() && (mouse_y >= kFrameY0) && (mouse_y <= kFrameY1) && (mouse_x <= kFrameX1)) {
-    redraw_button("BUILDING TRACK...");
+    menu_redraw_button("BUILDING TRACK...");
     return TRUE;
   }
 
@@ -370,7 +363,7 @@ static VOID file_selected() {
     module_close();
   }
 
-  redraw_button(loaded ? "START GAME" : NULL);
+  menu_redraw_button(loaded ? "START GAME" : NULL);
   redraw_mod_info();
 }
 
@@ -412,7 +405,7 @@ static VOID redraw_body() {
   redraw_path();
   redraw_file_list(TRUE);
   redraw_slider(TRUE);
-  redraw_button(module_is_open() ? "START GAME" : NULL);
+  menu_redraw_button(module_is_open() ? "START GAME" : NULL);
   redraw_mod_info();
 }
 
@@ -604,14 +597,13 @@ static VOID redraw_mod_info() {
   }
 }
 
-static VOID redraw_button(STRPTR text) {
+VOID menu_redraw_button(STRPTR text) {
   UBYTE* planes = gfx_display_planes();
 
 #define kPlayButtonWidth (kFrameX1 - kFrameX0)
 #define kPlayButtonHeight (kFrameY1 - kFrameY0)
 
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
-    //if (kFramePen & (1 << plane_idx)) {
     BOOL draw = text && (kFramePen & (1 << plane_idx));
     UBYTE* plane = planes + (plane_idx * kDispSlice);
     blit_rect(plane, kDispStride, kFrameX0, kFrameY0,
