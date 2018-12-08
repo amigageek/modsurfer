@@ -33,6 +33,7 @@ typedef UWORD Status;
 #define StatusOK 1
 #define StatusQuit 2
 #define StatusPlay 3
+#define StatusTrackEnd 4
 
 extern VOID common_init();
 extern UWORD string_length(STRPTR str);

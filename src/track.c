@@ -22,6 +22,7 @@ static struct {
 #define kEffectPosJump     0xB
 #define kEffectPatBreak    0xD
 #define kEffectExtend      0xE
+#define kEffectSetSpeed    0xF
 #define kEffectExtPatLoop  0x6
 #define kEffectExtPatDelay 0xE
 
@@ -374,7 +375,7 @@ static Status walk_pattern(UWORD pat_idx,
 
       switch (effect >> 8) {
       case kEffectPosJump:
-        div_idx = kDivsPerPat;
+        next_div_idx = kDivsPerPat;
         *pat_tbl_idx = effect & 0xFF;
         break;
 
@@ -386,7 +387,7 @@ static Status walk_pattern(UWORD pat_idx,
           *div_start_idx = 0;
         }
 
-        div_idx = kDivsPerPat;
+        next_div_idx = kDivsPerPat;
         break;
 
       case kEffectExtend:
@@ -415,6 +416,12 @@ static Status walk_pattern(UWORD pat_idx,
 
           break;
         }
+        }
+
+      case kEffectSetSpeed:
+        if ((effect & 0xFF) == 0) {
+          status = StatusTrackEnd;
+          next_div_idx = kDivsPerPat;
         }
       }
     }
@@ -459,7 +466,12 @@ static Status walk_song_table() {
     pat_tbl_visited[pat_tbl_idx] = 1;
     pat_tbl_idx += 1;
 
-    CHECK(walk_pattern(pat_idx, &pat_tbl_idx, &div_start_idx, &last_active_lane));
+    Status pat_status = walk_pattern(pat_idx, &pat_tbl_idx, &div_start_idx, &last_active_lane);
+    CHECK(pat_status);
+
+    if (pat_status == StatusTrackEnd) {
+      break;
+    }
   }
 
 cleanup:

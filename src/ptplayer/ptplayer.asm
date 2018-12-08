@@ -2258,6 +2258,10 @@ _ms_camera_z_inc:
 	move.b	ms_BeatsPerMin(a0),d1
 	mulu.w	d1,d0
 	move.b	mt_Speed(a0),d1
+	bne	.speed_not_zero
+	moveq	#0,d0
+	rts
+.speed_not_zero:
 	mulu.w	#125,d1
 	divu.w	d1,d0
 	rts
