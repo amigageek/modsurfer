@@ -1,5 +1,5 @@
 CC             = m68k-amigaos-gcc
-CFLAGS         = -O3 -m68000 -noixemul -fomit-frame-pointer -mregparm=4 -lnix13
+CFLAGS         = -O3 -m68000 -fomit-frame-pointer -mregparm=4
 LDFLAGS        = -s
 OUTDIR         = build
 DEPFLAGS       = -MT $@ -MMD -MP -MF $(OUTDIR)/$*.Td
@@ -37,7 +37,7 @@ $(OUTDIR)/%.o : %.c $(OUTDIR)/%.d
 $(OUTDIR)/%.o : %.asm
 	vasmm68k_mot -DMODSURFER -Faout -o $@ $<
 
-$(OUTDIR)/blit.o: $(IMAGES_HDR)
+$(OUTDIR)/gfx.o: $(IMAGES_HDR)
 
 $(TABLES_HDR): $(GENTABLES)
 	$(GENTABLES) > $@
