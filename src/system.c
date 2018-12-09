@@ -10,6 +10,7 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
+#include <proto/intuition.h>
 
 #define kLibVerKick1 33
 #define kLibVerKick3 39
@@ -22,12 +23,13 @@ static BOOL is_pal();
 static VOID set_intreq(UWORD intreq);
 
 struct GfxBase* GfxBase;
-struct Library* IntuitionBase;
+struct IntuitionBase* IntuitionBase;
 
 static struct {
   struct FileInfoBlock fib __attribute__((aligned(sizeof(LONG))));
   struct View* old_view;
   struct copinit* old_copinit;
+  BOOL wb_closed;
   UWORD old_intena;
   UWORD old_intreq;
   UWORD old_copcon;
@@ -38,7 +40,9 @@ Status system_init() {
   Status status = StatusOK;
 
   ASSERT(GfxBase = (struct GfxBase*)OpenLibrary("graphics.library", kLibVerKick1));
-  ASSERT(IntuitionBase = OpenLibrary("intuition.library", kLibVerKick1));
+  ASSERT(IntuitionBase = (struct IntuitionBase*)OpenLibrary("intuition.library", kLibVerKick1));
+
+  g.wb_closed = CloseWorkBench();
 
 cleanup:
   if (status == StatusError) {
@@ -49,8 +53,13 @@ cleanup:
 }
 
 VOID system_fini() {
+  if (g.wb_closed) {
+    OpenWorkBench();
+    g.wb_closed = FALSE;
+  }
+
   if (IntuitionBase) {
-    CloseLibrary(IntuitionBase);
+    CloseLibrary((struct Library*)IntuitionBase);
     IntuitionBase = NULL;
   }
 
