@@ -274,6 +274,11 @@ static Status select_samples() {
         UWORD pitch = ((UWORD)(0x10000 / avg_period) * samp_dom_freq[i - 1]) / 5;
 
         UWORD score_count = MAX(kCountTargetMin - sample_count[i], 0) << 8;
+
+        if (score_count > 0xC00) {
+          score_count *= 8;
+        }
+
         UWORD score_pitch = ABS(pitch - kPitchTarget);
 
 #if DEBUG_PATTERN
