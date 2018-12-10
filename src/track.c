@@ -310,6 +310,7 @@ cleanup:
 static Status walk_pattern(UWORD pat_idx,
                            UWORD* pat_tbl_idx,
                            UWORD* div_start_idx,
+                           UWORD* prev_step_active_lane,
                            UWORD* last_active_lane) {
   Status status = StatusOK;
   ModuleNonChip* nonchip = module_get_nonchip();
@@ -355,12 +356,21 @@ static Status walk_pattern(UWORD pat_idx,
     if (sample_in_step != 0) {
       step->sample = sample_in_step;
 
-      if (*last_active_lane != 0) {
-        step->active_lane = *last_active_lane;
-        *last_active_lane = 0;
+      if (*prev_step_active_lane != 0) {
+        step->active_lane = *prev_step_active_lane;
+        *prev_step_active_lane = 0;
       }
       else {
-        step->active_lane = 1 + (prng() % 3); // FIXME: optimize
+        static UWORD next_lane_lut[4][4] = {
+          // Row indexed by last active lane, column indexed by random number.
+          2, 1, 2, 3,
+          1, 2, 2, 3,
+          2, 1, 2, 3,
+          3, 2, 2, 1,
+        };
+
+        step->active_lane = next_lane_lut[*last_active_lane][prng() & 3];
+        *prev_step_active_lane = step->active_lane;
         *last_active_lane = step->active_lane;
       }
 
@@ -369,7 +379,7 @@ static Status walk_pattern(UWORD pat_idx,
     else {
       step->active_lane = 0;
       step->sample = 0;
-      *last_active_lane = 0;
+      *prev_step_active_lane = 0;
     }
 
     // Handle commands which change the next division step.
@@ -458,6 +468,7 @@ static Status walk_song_table() {
 
   // Walk through the pattern table, starting from the first entry.
   UWORD div_start_idx = 0;
+  UWORD prev_step_active_lane = 0;
   UWORD last_active_lane = 0;
 
   for (UWORD pat_tbl_idx = 0; pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
@@ -471,7 +482,7 @@ static Status walk_song_table() {
     pat_tbl_visited[pat_tbl_idx] = 1;
     pat_tbl_idx += 1;
 
-    Status pat_status = walk_pattern(pat_idx, &pat_tbl_idx, &div_start_idx, &last_active_lane);
+    Status pat_status = walk_pattern(pat_idx, &pat_tbl_idx, &div_start_idx, &prev_step_active_lane, &last_active_lane);
     CHECK(pat_status);
 
     if (pat_status == StatusTrackEnd) {
