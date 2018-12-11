@@ -199,6 +199,19 @@ static UWORD prng() {
   return seed;
 }
 
+static UWORD prng4() {
+  static UWORD last_random = 0;
+
+  if (last_random == 0) {
+    last_random = prng();
+  }
+
+  UWORD random4 = last_random & 3;
+  last_random >>= 2;
+
+  return random4;
+}
+
 static BOOL skip_command(PatternCommand* cmd) {
   BOOL skip = FALSE;
 
@@ -369,7 +382,7 @@ static Status walk_pattern(UWORD pat_idx,
           3, 2, 2, 1,
         };
 
-        step->active_lane = next_lane_lut[*last_active_lane][prng() & 3];
+        step->active_lane = next_lane_lut[*last_active_lane][prng4()];
         *prev_step_active_lane = step->active_lane;
         *last_active_lane = step->active_lane;
       }
