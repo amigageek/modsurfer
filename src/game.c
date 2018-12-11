@@ -69,8 +69,9 @@ VOID game_action_loop() {
   UWORD num_blocks_passed = 0;
   UWORD score = 0;
 
-  gfx_draw_track();
   system_acquire_control();
+  gfx_draw_track();
+  gfx_enable_copper_blits(TRUE);
 
   mt_init(&custom, module_get_nonchip(), module_get_samples(), 0);
   mt_mastervol(&custom, kVolumeMax);
@@ -169,51 +170,11 @@ VOID game_action_loop() {
   mt_Enable = 0;
   mt_end(&custom);
 
+  gfx_enable_copper_blits(FALSE);
+  gfx_clear_body();
   system_release_control();
 }
 
 static UBYTE read_mousex() {
   return custom.joy0dat & JOY0DAT_XALL;
 }
-
-#if 0 // FIXME
-  UBYTE* song_pos = (UBYTE*)((ULONG)&mt_Enable - 4);
-  ModuleNonChip* nonchip = module_get_nonchip();
-  UBYTE curr_pat_idx = (UBYTE)-1;
-  TrackScore* scores = track_get_scores();
-
-      UBYTE pat_idx = nonchip->header.pat_tbl[*song_pos];
-
-      if (pat_idx != curr_pat_idx) {
-        curr_pat_idx = pat_idx;
-
-        for (UWORD i = 0; i < kDispDepth; ++ i) {
-          blit_rect(&disp_bpls[i][0][0], 0, 0, kDispStrideB, kDispWidth, 40, 0);
-        }
-
-        TrackScore* score = &scores[pat_idx];
-
-        UBYTE num_str[10];
-        int_to_str(curr_pat_idx, num_str, 2, 10);
-        blit_text(&disp_bpls[0][0][0], kDispStrideB, kDispSliceB, num_str, 10, 0, 5);
-
-        UWORD text_x = 30;
-
-        for (UWORD samp_idx = 1; samp_idx < 31; ++ samp_idx) {
-          if (score->per_sample[samp_idx].in_pattern) {
-            UWORD color = (score->selected_sample == samp_idx) ? 6 : 5;
-
-            int_to_str(samp_idx, num_str, 2, 10);
-            blit_text(&disp_bpls[0][0][0], kDispStrideB, kDispSliceB, num_str, text_x, 0, color);
-
-            int_to_str(score->per_sample[samp_idx].count >> 8, num_str, 2, 16);
-            blit_text(&disp_bpls[0][0][0], kDispStrideB, kDispSliceB, num_str, text_x, 16, color);
-
-            int_to_str(score->per_sample[samp_idx].pitch >> 8, num_str, 2, 16);
-            blit_text(&disp_bpls[0][0][0], kDispStrideB, kDispSliceB, num_str, text_x, 8, color);
-
-            text_x += 20;
-          }
-        }
-      }
-#endif

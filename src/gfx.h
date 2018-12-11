@@ -8,7 +8,7 @@
 #define kDispWidth 0x140
 #define kDispHeight 0x100
 #define kDispDepth 3
-#define kDispRowPadW 6 // padded for horizontal scrolling
+#define kDispRowPadW 8 // padded for horizontal scrolling
 #define kDispColPad 1  // ^-
 #define kDispStride ((kDispWidth / kBitsPerByte) + (kDispRowPadW * kBytesPerWord))
 #define kDispSlice (kDispStride * (kDispHeight + kDispColPad))
@@ -17,7 +17,7 @@
 #define kFontHeight 5
 #define kFontSpacing (kFontWidth + 1)
 #define kFontNGlyphs 0x60
-#define kFarNearRatio 7
+#define kFarNearRatio 7 // FIXME: 8?
 #define kFarZ 0xFFFF
 #define kNearZ (kFarZ / kFarNearRatio)
 #define kBlockGapDepth ((kFarZ - kNearZ + 1) / kNumVisibleSteps)
@@ -48,3 +48,4 @@ extern VOID gfx_update_display(TrackStep *step_near,
                                UWORD score_frac);
 extern VOID gfx_wait_vblank();
 extern VOID gfx_wait_blit();
+extern VOID gfx_enable_copper_blits(BOOL enable);

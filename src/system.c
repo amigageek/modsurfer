@@ -188,9 +188,9 @@ VOID system_acquire_control() {
   // Wait for any in-flight blits to complete.
   gfx_wait_blit();
 
-  // Save/allow copper to access blitter.
+  // Save/disable copper access to blitter registers.
   g.old_copcon = custom.copcon;
-  custom.copcon = COPCON_CDANG;
+  custom.copcon = 0;
 
   // Save active view and load our copperlist.
   g.old_view = GfxBase->ActiView;
@@ -248,7 +248,7 @@ VOID system_release_control() {
   gfx_wait_vblank();
   gfx_wait_blit();
 
-  // Restore copper access.
+  // Restore copper access to blitter registers.
   custom.copcon = g.old_copcon;
 
   // Enable task switching after restoring the view.

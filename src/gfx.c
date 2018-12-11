@@ -29,8 +29,9 @@
 #define kPlayerZ (kNearZ + (kNumStepsDelay * kBlockGapDepth))
 #define kBlockWidth ((3 * kLaneWidth) / 5)
 #define kStripeWidth 4
+#define kBorderWidth 10
 #define kHeaderPalette 0xB8C, 0x425, 0x94A
-#define kFadeActionNumColors 8
+#define kFadeActionNumColors 9
 
 static VOID make_bitmap();
 static Status make_screen();
@@ -55,6 +56,7 @@ static struct {
   struct Window* window;
   struct cprlist cpr_list;
   UWORD cop_list_spr_idx;
+  UWORD cop_list_body_colors_idx;
   UWORD cop_list_rows_end;
   UWORD cop_list_score_idx;
   struct View view;
@@ -203,7 +205,7 @@ VOID gfx_fade_menu(BOOL fade_in) {
 
 BOOL gfx_fade_action(BOOL fade_in) {
   UWORD colors_lo[kFadeActionNumColors] = { 0x000 };
-  UWORD colors_hi[kFadeActionNumColors] = { 0x606, 0x402, 0x804, 0x415, 0x739, 0x94B, 0xB5F, 0xD9F };
+  UWORD colors_hi[kFadeActionNumColors] = { 0x606, 0x402, 0x804, 0x415, 0x739, 0x94B, 0xB5F, 0xD9F, 0x404 };
 
   BOOL fading = fade_common(fade_in ? g.colors : colors_lo,
                             fade_in ? colors_hi : g.colors,
@@ -213,6 +215,8 @@ BOOL gfx_fade_action(BOOL fade_in) {
     for (UWORD i = 0; i < 5; ++ i) {
       cop_lists[cop_list_idx][g.cop_list_spr_idx + 3 + (i * 2)] = g.colors[3 + i];
     }
+
+    cop_lists[cop_list_idx][g.cop_list_body_colors_idx + 9] = g.colors[8];
   }
 
   return fading;
@@ -250,7 +254,7 @@ static BOOL fade_common(UWORD* colors_lo,
 VOID gfx_clear_body() {
   for (UWORD i = 0; i < kDispDepth; ++ i) {
     blit_rect(&disp_planes[i][0][0], kDispStride, 0, kDrawTop,
-              NULL, 0, 0, 0, kDispWidth, kDrawHeight, FALSE);
+              NULL, 0, 0, 0, kDispStride * kBitsPerByte, kDrawHeight, FALSE);
   }
 }
 
@@ -262,6 +266,10 @@ VOID gfx_draw_track() {
     (-kLaneWidth / 2) + (kStripeWidth / 2),
     ( kLaneWidth / 2) - (kStripeWidth / 2),
     ( kLaneWidth / 2) + (kStripeWidth / 2),
+    (-(3 * kLaneWidth) / 2) - kBorderWidth,
+    (-(3 * kLaneWidth) / 2),
+    ( (3 * kLaneWidth) / 2),
+    ( (3 * kLaneWidth) / 2) + kBorderWidth,
     -kBlockWidth / 2 - kLaneWidth,
      kBlockWidth / 2 - kLaneWidth,
     -kBlockWidth / 2,
@@ -276,19 +284,21 @@ VOID gfx_draw_track() {
     far_sx[i] = near_sx[i] / kFarNearRatio;
   }
 
-  UWORD colors[] = { 1, 1, 1, 1, 2, 2, 3, 3, 4, 4 };
+  UWORD colors[] = { 1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 3, 4, 4 };
+
+#define kDrawCenterX ((kDispStride * kBitsPerByte) / 2)
 
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     UWORD* plane = &disp_planes[plane_idx][0][0];
 
     for (UWORD i = 0; i < ARRAY_NELEMS(near_sx); ++ i) {
       if (colors[i] & (1 << plane_idx)) {
-        blit_line(plane, kDispStride, far_sx[i] + (kDispWidth / 2),
-                  kDrawTop, near_sx[i] + (kDispWidth / 2), kDispHeight - 1);
+        blit_line(plane, kDispStride, far_sx[i] + kDrawCenterX,
+                  kDrawTop, near_sx[i] + kDrawCenterX, kDispHeight - 1);
       }
     }
 
-    blit_fill(plane, kDispStride, 0, kDrawTop, kDispWidth, kDrawHeight);
+    blit_fill(plane, kDispStride, 0, kDrawTop, kDispStride * kBitsPerByte, kDrawHeight);
   }
 }
 
@@ -361,7 +371,7 @@ VOID gfx_update_display(TrackStep *step_near,
     }
   }
 
-  UWORD bplmod = (kDispRowPadW - 1 - prev_shift_w) << 1;
+  UWORD bplmod = (((3 * kDispRowPadW) / 2) - 1 - prev_shift_w) << 1;
 
   cop_row -= 16;
   cop_row[3] = bplmod;
@@ -544,6 +554,8 @@ static Status make_copperlists() {
 
   *(cl ++) = ((kDispWinY + kDispHdrHeight - 2) << 8) | 0x1;
   *(cl ++) = 0xFFFE;
+
+  g.cop_list_body_colors_idx = cl - cop_lists[0];
 
   for (UWORD i = 1; i < 8; ++ i) {
     *(cl ++) = mCustomOffset(color[i]);
@@ -778,4 +790,8 @@ static VOID update_score(UWORD* cop_list,
       }
     }
   }
+}
+
+VOID gfx_enable_copper_blits(BOOL enable) {
+  custom.copcon = enable ? COPCON_CDANG : 0;
 }
