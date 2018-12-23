@@ -7,9 +7,11 @@
 #define kNumStepsDelay 1
 
 typedef struct {
-  UBYTE active_lane:2;
-  UBYTE collected:1;
-  UBYTE sample:5;
+  UWORD active_lane:2;
+  UWORD collected:1;
+  UWORD sample:5;
+  UWORD color:4;
+  UWORD unused:4;
 } TrackStep;
 
 typedef struct {
@@ -22,6 +24,7 @@ typedef struct {
   UWORD selected_sample;
 } TrackScore;
 
+VOID track_init();
 Status track_build();
 VOID track_free();
 TrackStep* track_get_steps();

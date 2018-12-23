@@ -3,6 +3,7 @@
 #include "gfx.h"
 #include "menu.h"
 #include "system.h"
+#include "track.h"
 
 #include <dos/dos.h>
 
@@ -11,6 +12,7 @@ int main() {
 
   common_init();
   ASSERT(system_init());
+  track_init();
   ASSERT(gfx_init());
   ASSERT(menu_init());
   ASSERT(game_loop());

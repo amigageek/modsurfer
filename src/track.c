@@ -6,6 +6,8 @@
 #include <stdio.h> // FIXME
 #include <stdlib.h> // FIXME
 
+#define kPeriodTableSize 857 // C-1 = 856
+
 static struct {
   TrackStep* track_steps;
   ULONG track_steps_size;
@@ -13,6 +15,7 @@ static struct {
   UWORD track_num_blocks;
   ULONG pat_select_samples[kNumPatternsMax];
   TrackScore scores[kNumPatternsMax];
+  UBYTE period_to_color[kPeriodTableSize];
 } g;
 
 // FIXME: test all effects
@@ -27,6 +30,31 @@ static struct {
 #define kEffectExtPatDelay 0xE
 
 //#define DEBUG_PATTERN 10
+
+VOID track_init() {
+  UWORD period_table[] = {
+  // C    C#   D    D#   E    F    F#   G    G#   A    A#   B
+    856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, // Octave 1
+    428, 404, 381, 360, 339, 320, 302, 285, 269, 254, 240, 226, // Octave 2
+    214, 202, 190, 180, 170, 160, 151, 143, 135, 127, 120, 113, // Octave 3
+    0,
+  };
+
+  UWORD period_idx = 0;
+  UWORD next_period = period_table[period_idx];
+  UWORD next_color = 0;
+
+  for (WORD i = kPeriodTableSize - 1; i >= 0; -- i) {
+    if (i == next_period) {
+      next_color = period_idx / 3;
+
+      ++ period_idx;
+      next_period = period_table[period_idx];
+    }
+
+    g.period_to_color[i] = next_color;
+  }
+}
 
 static Status track_realloc() {
   Status status = StatusOK;
@@ -348,6 +376,7 @@ static Status walk_pattern(UWORD pat_idx,
     }
 
     UBYTE sample_in_step = 0;
+    UBYTE step_color = 0;
 
     for (UWORD cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
       PatternCommand* cmd = (PatternCommand*)&div->commands[cmd_idx];
@@ -360,6 +389,16 @@ static Status walk_pattern(UWORD pat_idx,
 
       if (sample && (select_samples & (1UL << sample))) {
         sample_in_step = sample;
+
+        static UWORD last_period[4] = { 856, 856, 856, 856 }; // C-1
+        UWORD period = cmd->parameter;
+
+        if (period == 0) {
+          period = last_period[cmd_idx];
+        }
+
+        last_period[cmd_idx] = period;
+        step_color = g.period_to_color[period];
       }
     }
 
@@ -368,6 +407,7 @@ static Status walk_pattern(UWORD pat_idx,
 
     if (sample_in_step != 0) {
       step->sample = sample_in_step;
+      step->color = step_color;
 
       if (*prev_step_active_lane != 0) {
         step->active_lane = *prev_step_active_lane;
@@ -392,6 +432,7 @@ static Status walk_pattern(UWORD pat_idx,
     else {
       step->active_lane = 0;
       step->sample = 0;
+      step->color = 0;
       *prev_step_active_lane = 0;
     }
 
