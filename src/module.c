@@ -170,9 +170,14 @@ static Status read_samples(BPTR file,
   // Load sample data into chip memory.
   CHECK(g.samples = AllocMem(g.samples_size, MEMF_CHIP));
 
-  CHECK(file_size >= g.nonchip_size + g.samples_size);
+  ULONG read_size = file_size - g.nonchip_size;
   Seek(file, g.nonchip_size, OFFSET_BEGINNING);
-  CHECK(Read(file, g.samples, g.samples_size) == g.samples_size);
+  CHECK(Read(file, g.samples, read_size) == read_size);
+
+  // File size may be slightly truncated in some mods.
+  if (read_size < g.samples_size) {
+    mem_clear(g.samples + read_size, g.samples_size - read_size);
+  }
 
 cleanup:
   return status;

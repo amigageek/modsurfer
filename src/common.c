@@ -13,6 +13,16 @@ VOID common_init() {
   }
 }
 
+VOID mem_clear(APTR base,
+               ULONG size) {
+  UBYTE* start = base;
+  UBYTE* end = base + size;
+
+  for (UBYTE* iter = start; iter != end; ++ iter) {
+    *iter = 0;
+  }
+}
+
 UWORD string_length(STRPTR str) {
   UWORD len;
   for (len = 0; str[len]; ++ len);
