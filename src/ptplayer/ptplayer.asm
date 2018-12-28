@@ -161,6 +161,7 @@ n_freecnt	rs.b	1
 n_musiconly	rs.b	1
 	ifd	MODSURFER
 n_ms_lastsample	rs.b	1
+n_pad		rs.b	1
 	endc
 n_sizeof	rs.b	0
 
