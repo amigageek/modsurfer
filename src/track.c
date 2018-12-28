@@ -385,19 +385,20 @@ static Status walk_pattern(UWORD pat_idx,
         continue;
       }
 
+      static UBYTE last_sample[4] = { 0, 0, 0, 0 };
       UBYTE sample = (cmd->sample_hi << 4) | cmd->sample_lo;
 
-      if (sample && (select_samples & (1UL << sample))) {
+      if (! sample) {
+        sample = last_sample[cmd_idx];
+      }
+      else {
+        last_sample[cmd_idx] = sample;
+      }
+
+      UWORD period = cmd->parameter;
+
+      if (period && sample && (select_samples & (1UL << sample))) {
         sample_in_step = sample;
-
-        static UWORD last_period[4] = { 856, 856, 856, 856 }; // C-1
-        UWORD period = cmd->parameter;
-
-        if (period == 0) {
-          period = last_period[cmd_idx];
-        }
-
-        last_period[cmd_idx] = period;
         step_color = g.period_to_color[period];
       }
     }
