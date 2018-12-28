@@ -159,6 +159,9 @@ n_retrigcount	rs.b	1
 n_sfxpri	rs.b	1
 n_freecnt	rs.b	1
 n_musiconly	rs.b	1
+	ifd	MODSURFER
+n_ms_lastsample	rs.b	1
+	endc
 n_sizeof	rs.b	0
 
 
@@ -1296,8 +1299,16 @@ mt_playvoice:
 	rol.l	#4,d0			; ....00SS
 
 	ifd	MODSURFER
+	; if sample is zero use previous sample played on this channel
+	move.b	d0,d1
+	bne	.3a
+	move.b	n_ms_lastsample(a2),d1
+	jmp	.3b
+.3a:
+	move.b	d1,n_ms_lastsample(a2)
+.3b:
 	; play next note at zero volume if the game suppressed this sample
-	cmp.b	ms_SuppressSample(a4),d0
+	cmp.b	ms_SuppressSample(a4),d1
 	seq.b	ms_SuppressNext(a4)
 	endc
 
@@ -1370,7 +1381,6 @@ set_loop:
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d1
-	move.b	d1,ms_SuppressNext(a4)
 .no_suppress:
 	endc
 
@@ -1826,7 +1836,6 @@ mt_tremolo:
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d0
-	move.b	d0,ms_SuppressNext(a4)
 .no_suppress:
 	endc
 
@@ -1871,7 +1880,6 @@ set_vol:
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d0
-	move.b	d0,ms_SuppressNext(a4)
 .no_suppress:
 	endc
 
@@ -1908,7 +1916,6 @@ mt_volchange:
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d4
-	move.b	d4,ms_SuppressNext(a4)
 .no_suppress:
 	endc
 
@@ -2185,7 +2192,6 @@ mt_notecut:
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d7
-	move.b	d7,ms_SuppressNext(a4)
 .no_suppress:
 	endc
 
