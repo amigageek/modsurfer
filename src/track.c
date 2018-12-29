@@ -348,11 +348,15 @@ cleanup:
   return status;
 }
 
+typedef struct {
+  UWORD pat_tbl_idx;
+  UWORD div_start_idx;
+  UWORD active_contiguous_count;
+  UWORD last_active_lane;
+} BuildState;
+
 static Status walk_pattern(UWORD pat_idx,
-                           UWORD* pat_tbl_idx,
-                           UWORD* div_start_idx,
-                           UWORD* prev_step_active_lane,
-                           UWORD* last_active_lane) {
+                           BuildState* state) {
   Status status = StatusOK;
   ModuleNonChip* nonchip = module_get_nonchip();
 
@@ -360,8 +364,8 @@ static Status walk_pattern(UWORD pat_idx,
   Pattern* pat = &nonchip->patterns[pat_idx];
   ULONG select_samples = g.pat_select_samples[pat_idx];
 
-  UWORD div_idx = *div_start_idx;
-  *div_start_idx = 0;
+  UWORD div_idx = state->div_start_idx;
+  state->div_start_idx = 0;
 
   UWORD loop_idx = 0;
   UWORD loop_count = -1;
@@ -410,31 +414,41 @@ static Status walk_pattern(UWORD pat_idx,
       step->sample = sample_in_step;
       step->color = step_color;
 
-      if (*prev_step_active_lane != 0) {
-        step->active_lane = *prev_step_active_lane;
-        *prev_step_active_lane = 0;
-      }
-      else {
-        static UWORD next_lane_lut[4][4] = {
-          // Row indexed by last active lane, column indexed by random number.
-          2, 1, 2, 3,
-          1, 2, 2, 3,
-          2, 1, 2, 3,
-          3, 2, 2, 1,
-        };
+      static UWORD next_lane_lut[4][4] = {
+        // Row indexed by last active lane, column indexed by random number.
+        2, 1, 2, 3,
+        1, 2, 2, 3,
+        2, 1, 2, 3,
+        3, 2, 2, 1,
+      };
 
-        step->active_lane = next_lane_lut[*last_active_lane][prng4()];
-        *prev_step_active_lane = step->active_lane;
-        *last_active_lane = step->active_lane;
+      UWORD random4 = prng4();
+
+      if (state->active_contiguous_count == 1) {
+        // Avoid lane change in contiguous segments until length is >= 2.
+        random4 = 0;
       }
 
+      if (state->active_contiguous_count && (state->last_active_lane != 2) && (random4 == 3)) {
+        // Avoid left-right and right-left lane changes in contiguous segments.
+        random4 = 0;
+      }
+
+      step->active_lane = next_lane_lut[state->last_active_lane][random4];
+
+      if (step->active_lane != state->last_active_lane) {
+        state->last_active_lane = step->active_lane;
+        state->active_contiguous_count = 0;
+      }
+
+      ++ state->active_contiguous_count;
       ++ g.track_num_blocks;
     }
     else {
       step->active_lane = 0;
       step->sample = 0;
       step->color = 0;
-      *prev_step_active_lane = 0;
+      state->active_contiguous_count = 0;
     }
 
     // Handle commands which change the next division step.
@@ -446,15 +460,15 @@ static Status walk_pattern(UWORD pat_idx,
       switch (effect >> 8) {
       case kEffectPosJump:
         next_div_idx = kDivsPerPat;
-        *pat_tbl_idx = effect & 0xFF;
+        state->pat_tbl_idx = effect & 0xFF;
         break;
 
       case kEffectPatBreak:
-        *div_start_idx = effect & 0xFF;
+        state->div_start_idx = effect & 0xFF;
 
         // If division index exceeds kDivsPerPat ptplayer jumps to first division.
-        if (*div_start_idx >= kDivsPerPat) {
-          *div_start_idx = 0;
+        if (state->div_start_idx >= kDivsPerPat) {
+          state->div_start_idx = 0;
         }
 
         next_div_idx = kDivsPerPat;
@@ -522,22 +536,20 @@ static Status walk_song_table() {
   }
 
   // Walk through the pattern table, starting from the first entry.
-  UWORD div_start_idx = 0;
-  UWORD prev_step_active_lane = 0;
-  UWORD last_active_lane = 0;
+  BuildState state = { 0 };
 
-  for (UWORD pat_tbl_idx = 0; pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
-    UWORD pat_idx = nonchip->header.pat_tbl[pat_tbl_idx];
+  for (state.pat_tbl_idx = 0; state.pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
+    UWORD pat_idx = nonchip->header.pat_tbl[state.pat_tbl_idx];
 
     // Stop if we looped in the pattern table.
-    if (pat_tbl_visited[pat_tbl_idx]) {
+    if (pat_tbl_visited[state.pat_tbl_idx]) {
       break;
     }
 
-    pat_tbl_visited[pat_tbl_idx] = 1;
-    pat_tbl_idx += 1;
+    pat_tbl_visited[state.pat_tbl_idx] = 1;
+    ++ state.pat_tbl_idx;
 
-    Status pat_status = walk_pattern(pat_idx, &pat_tbl_idx, &div_start_idx, &prev_step_active_lane, &last_active_lane);
+    Status pat_status = walk_pattern(pat_idx, &state);
     CHECK(pat_status);
 
     if (pat_status == StatusTrackEnd) {
