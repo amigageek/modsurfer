@@ -134,8 +134,8 @@ VOID game_action_loop() {
     TrackStep* collect_step = &steps[next_step_idx + kNumStepsDelay];
     WORD* bound = (WORD*)&bounds[collect_step->active_lane];
 
-    if ((! collect_step->collected) && player_x >= bound[0] && player_x <= bound[1]) {
-      collect_step->collected = TRUE;
+    if ((collect_step->color < 12) && (player_x >= bound[0]) && (player_x <= bound[1])) {
+      collect_step->color += 12;
       ms_SuppressSample = 0xFF;
       ++ score;
     }

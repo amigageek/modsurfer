@@ -19,7 +19,7 @@
 #define kDispFetchStop ((kDispFetchX / 0x2) - kDispRes + (0x8 * ((kDispWidth / 0x10) - 1)))
 #define kDrawHeight 204// ((4 * kDispHeight) / 5)
 #define kDrawTop (kDispHeight - kDrawHeight)
-#define kDispCopSizeWords (384 + ((kDrawHeight + 1) * 16))
+#define kDispCopSizeWords (384 + ((kDrawHeight + 1) * 20))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 5
@@ -31,7 +31,17 @@
 #define kStripeWidth 4
 #define kBorderWidth 10
 #define kHeaderPalette 0xB8C, 0x425, 0x94A
-#define kFadeActionNumColors 28
+#define kFadeActionNumColors 44
+
+extern VOID update_coplist(UWORD* colors __asm("a2"),
+                           UWORD* cop_row __asm("a3"),
+                           WORD* z_incs __asm("a4"),
+                           TrackStep* step_near __asm("a6"),
+                           ULONG step_frac __asm("d3"),
+                           ULONG shift_params __asm("d4"),
+                           UWORD shift_err_inc __asm("a1"),
+                           ULONG z __asm("d6"),
+                           ULONG loop_counts __asm("d7"));
 
 static VOID make_bitmap();
 static Status make_screen();
@@ -210,7 +220,9 @@ BOOL gfx_fade_action(BOOL fade_in) {
   static UWORD colors_hi[kFadeActionNumColors] = {
     0x810, 0x910, 0xA20, 0xB20, 0xB30, 0xC40, 0xD50, 0xD60, 0xD70, 0xE80, 0xE90, 0xFA0,
     0x300, 0x300, 0x310, 0x310, 0x310, 0x410, 0x420, 0x420, 0x420, 0x430, 0x430, 0x530,
-    0x606, 0x909, 0xDAA, 0x404
+    0x606, 0x909, 0xDAA, 0x404,
+    0x505, 0x606, 0x606, 0x707, 0x707, 0x808, 0x909, 0x909,
+    0xA0A, 0x909, 0x808, 0x808, 0x707, 0x707, 0x606, 0x505,
   };
 
   BOOL fading = fade_common(fade_in ? g.colors : colors_lo,
@@ -260,6 +272,9 @@ VOID gfx_clear_body() {
   }
 }
 
+#define kNumTrackLines (ARRAY_NELEMS(near_sx))
+#define kDrawCenterX ((kDispStride * kBitsPerByte) / 2)
+
 VOID gfx_draw_track() {
   gfx_clear_body();
 
@@ -278,17 +293,26 @@ VOID gfx_draw_track() {
      kBlockWidth / 2,
     -kBlockWidth / 2 + kLaneWidth,
      kBlockWidth / 2 + kLaneWidth,
+    -kDrawCenterX,
+    kDrawCenterX - 1,
+    (-(3 * kLaneWidth) / 2) - kBorderWidth - 1,
+    ( (3 * kLaneWidth) / 2) + kBorderWidth + 1,
   };
 
-  WORD far_sx[ARRAY_NELEMS(near_sx)];
+  WORD far_sx[kNumTrackLines];
 
-  for (UWORD i = 0; i < ARRAY_NELEMS(near_sx); ++ i) {
-    far_sx[i] = near_sx[i] / kFarNearRatio;
+  for (UWORD i = 0; i < kNumTrackLines - 2; ++ i) {
+    far_sx[i] = near_sx[i];
+
+    if (i < (kNumTrackLines - 4)) {
+      far_sx[i] /= kFarNearRatio;
+    }
   }
 
-  UWORD colors[] = { 1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 3, 4, 4 };
+  far_sx[kNumTrackLines - 2] = far_sx[4] - 1;
+  far_sx[kNumTrackLines - 1] = far_sx[7] + 1;
 
-#define kDrawCenterX ((kDispStride * kBitsPerByte) / 2)
+  UWORD colors[] = { 1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 3, 4, 4, 6, 6, 6, 6, };
 
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     UWORD* plane = &disp_planes[plane_idx][0][0];
@@ -337,51 +361,12 @@ VOID gfx_update_display(TrackStep *step_near,
   UWORD* z_inc_ptr = g.z_incs;
   UWORD* cop_row = &cop_list[g.cop_list_rows_end];
 
-  for (WORD draw_y = kDrawHeight - 1; draw_y >= 0; -- draw_y) {
-    UWORD z_inc = *(z_inc_ptr ++);
-    z += z_inc;
-    step_frac += z_inc;
+  ULONG loop_counts =
+    ((0xFF - (kDispWinY + kDispHeight - kDrawHeight)) << 0x10) |
+    (kDispWinY + kDispHeight - 1 - 0x100);
 
-    if (step_frac >= kBlockGapDepth) {
-      step_frac -= kBlockGapDepth;
-      ++ step;
-      active_color_idx = step->color;
-    }
-
-    WORD shift_w = shift_x >> 4;
-    UWORD bplmod = (kDispRowPadW - 1 + (shift_w - prev_shift_w)) << 1;
-    prev_shift_w = shift_w;
-
-    cop_row -= 16;
-    cop_row[3] = bplmod;
-    cop_row[5] = bplmod;
-    cop_row[7] = (shift_x & 0xF) | ((shift_x & 0xF) << 4);
-    cop_row[9] = (z & 0x1000) ? g.colors[24] : 0x000;
-
-    UWORD lane_color = g.colors[active_color_idx + (step->collected ? 12 : 0)];
-    cop_row[11] = (step->active_lane == 1) ? lane_color : 0x000;
-    cop_row[13] = (step->active_lane == 2) ? lane_color : 0x000;
-    cop_row[15] = (step->active_lane == 3) ? lane_color : 0x000;
-
-    UWORD disp_y = draw_y + (kDispHeight - kDrawHeight);
-
-    if (disp_y == (0x100 - kDispWinY)) {
-      cop_row -= 2;
-    }
-
-    shift_err += shift_err_inc;
-
-    if (shift_err >= 0x2000) { // FIXME: while
-      shift_x += shift_x_inc;
-      shift_err -= 0x4000;
-    }
-  }
-
-  UWORD bplmod = (((3 * kDispRowPadW) / 2) - 1 - prev_shift_w) << 1;
-
-  cop_row -= 16;
-  cop_row[3] = bplmod;
-  cop_row[5] = bplmod;
+  ULONG shift_params = (shift_start_x & 0xFFFF) | (shift_x_inc << 0x10);
+  update_coplist(g.colors, cop_row, g.z_incs, step_near, step_frac, shift_params, shift_err_inc, z, loop_counts);
 
   custom.cop1lc = (ULONG)cop_list;
 }
@@ -595,6 +580,10 @@ static Status make_copperlists() {
     *(cl ++) = 0;
     *(cl ++) = mCustomOffset(color[4]);
     *(cl ++) = 0;
+    *(cl ++) = mCustomOffset(color[5]);
+    *(cl ++) = 0;
+    *(cl ++) = mCustomOffset(color[6]);
+    *(cl ++) = (0x8 * (disp_y - start_y)) / (stop_y - start_y);
   }
 
   g.cop_list_rows_end = cl - cop_lists[0];
@@ -776,6 +765,7 @@ static VOID update_sprite_pos(UWORD player_x) {
 }
 
 #define kColorCycleZShift 9
+#define kColorCycleNum 14
 
 static VOID update_sprite_colors(UWORD* cop_list,
                                  ULONG camera_z) {
@@ -786,7 +776,7 @@ static VOID update_sprite_colors(UWORD* cop_list,
 
   UWORD* cop_list_colors = &cop_list[g.cop_list_spr_idx + 3];
 
-  for (UWORD color_idx = 0; color_idx < 14; ++ color_idx) {
+  for (UWORD color_idx = 0; color_idx < kColorCycleNum; ++ color_idx) {
     cop_list_colors[color_idx << 1] = (color_mask & (1 << color_idx)) ? color1 : color2;
   }
 
@@ -800,7 +790,8 @@ static VOID update_sprite_colors(UWORD* cop_list,
   UWORD cycle_shift = cycle_count - last_cycle_count;
   last_cycle_count = cycle_count;
 
-  color_mask = ((color_mask << cycle_shift) | (color_mask >> (14 - cycle_shift))) & 0x3FFF;
+  color_mask = ((color_mask << cycle_shift) | (color_mask >> (kColorCycleNum - cycle_shift)));
+  color_mask &= (1 << kColorCycleNum) - 1;
 }
 
 static VOID update_score(UWORD* cop_list,

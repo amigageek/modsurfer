@@ -14,7 +14,7 @@ IMAGES_HDR     = $(OUTDIR)/images.h
 IMAGES         = images/font.iff images/logo.iff images/pointer.iff images/ship.iff
 
 MODSURFER      = $(OUTDIR)/modsurfer
-MODSURFER_SRCS = blit.c common.c dtypes.c game.c gfx.c keyboard.asm main.c menu.c module.c ptplayer/ptplayer.asm system.c track.c
+MODSURFER_SRCS = blit.c common.c dtypes.c game.c gfx.c gfx_opt.asm keyboard.asm main.c menu.c module.c ptplayer/ptplayer.asm system.c track.c
 MODSURFER_OBJS = $(patsubst %, $(OUTDIR)/%.o, $(basename $(MODSURFER_SRCS)))
 
 $(shell mkdir -p $(OUTDIR)/ptplayer >/dev/null)

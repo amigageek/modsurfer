@@ -14,7 +14,6 @@ static struct {
   ULONG track_length;
   UWORD track_num_blocks;
   ULONG pat_select_samples[kNumPatternsMax];
-  TrackScore scores[kNumPatternsMax];
   UBYTE period_to_color[kPeriodTableSize];
 } g;
 
@@ -265,10 +264,6 @@ static Status select_samples() {
     for (UWORD i = 0; i < 0x20; ++ i) {
       sample_count[i] = 0;
       sample_periods[i] = 0;
-      g.scores[pat_idx].per_sample[i].in_pattern = FALSE;
-      g.scores[pat_idx].per_sample[i].pitch = 0;
-      g.scores[pat_idx].per_sample[i].count = 0;
-      g.scores[pat_idx].selected_sample = 0;
     }
 
     Pattern* pat = &nonchip->patterns[pat_idx];
@@ -327,9 +322,6 @@ static Status select_samples() {
           printf("sample %lu pitch %ld count %lu\n", (ULONG)i, (LONG)pitch, (ULONG)sample_count[i]);
         }
 #endif
-        g.scores[pat_idx].per_sample[i].in_pattern = TRUE;
-        g.scores[pat_idx].per_sample[i].pitch = score_pitch;
-        g.scores[pat_idx].per_sample[i].count = score_count;
 
         ULONG score = (score_count * kCountWeight) + (score_pitch * kPitchWeight);
 
@@ -341,7 +333,6 @@ static Status select_samples() {
     }
 
     g.pat_select_samples[pat_idx] = 1UL << best_score_idx;
-    g.scores[pat_idx].selected_sample = best_score_idx;
   }
 
 cleanup:
@@ -408,7 +399,7 @@ static Status walk_pattern(UWORD pat_idx,
     }
 
     TrackStep* step = &g.track_steps[g.track_length];
-    step->collected = 0;
+    *step = (TrackStep){ 0 };
 
     if (sample_in_step != 0) {
       step->sample = sample_in_step;
@@ -445,9 +436,6 @@ static Status walk_pattern(UWORD pat_idx,
       ++ g.track_num_blocks;
     }
     else {
-      step->active_lane = 0;
-      step->sample = 0;
-      step->color = 0;
       state->active_contiguous_count = 0;
     }
 
@@ -606,8 +594,4 @@ ULONG track_get_length() {
 
 UWORD track_get_num_blocks() {
   return g.track_num_blocks;
-}
-
-TrackScore* track_get_scores() {
-  return g.scores;
 }
