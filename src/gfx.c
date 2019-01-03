@@ -31,7 +31,7 @@
 #define kStripeWidth 4
 #define kBorderWidth 10
 #define kHeaderPalette 0xB8C, 0x425, 0x94A
-#define kFadeActionNumColors 44
+#define kFadeActionNumColors 52
 
 extern VOID update_coplist(UWORD* colors __asm("a2"),
                            UWORD* cop_row __asm("a3"),
@@ -67,8 +67,9 @@ static struct {
   struct Screen* screen;
   struct Window* window;
   struct cprlist cpr_list;
+  UWORD cop_list_back;
   UWORD cop_list_spr_idx;
-  UWORD cop_list_body_colors_idx;
+  UWORD cop_list_rows_start;
   UWORD cop_list_rows_end;
   UWORD cop_list_score_idx;
   struct View view;
@@ -215,7 +216,8 @@ VOID gfx_fade_menu(BOOL fade_in) {
   }
 }
 
-BOOL gfx_fade_action(BOOL fade_in) {
+VOID gfx_fade_action(BOOL fade_in,
+                     BOOL delay_fade) {
   static UWORD colors_lo[kFadeActionNumColors] = { 0x000 };
   static UWORD colors_hi[kFadeActionNumColors] = {
     0x810, 0x910, 0xA20, 0xB20, 0xB30, 0xC40, 0xD50, 0xD60, 0xD70, 0xE80, 0xE90, 0xFA0,
@@ -223,17 +225,27 @@ BOOL gfx_fade_action(BOOL fade_in) {
     0x606, 0x909, 0xDAA, 0x404,
     0x505, 0x606, 0x606, 0x707, 0x707, 0x808, 0x909, 0x909,
     0xA0A, 0x909, 0x808, 0x808, 0x707, 0x707, 0x606, 0x505,
+    0x000, 0x001, 0x002, 0x003, 0x004, 0x005, 0x006, 0x007,
   };
 
-  BOOL fading = fade_common(fade_in ? g.colors : colors_lo,
-                            fade_in ? colors_hi : g.colors,
-                            kFadeActionNumColors, fade_in);
-
-  for (UWORD cop_list_idx = 0; cop_list_idx < 2; ++ cop_list_idx) {
-    cop_lists[cop_list_idx][g.cop_list_body_colors_idx + 9] = g.colors[27];
+  if (! delay_fade) {
+    fade_common(fade_in ? g.colors : colors_lo,
+                fade_in ? colors_hi : g.colors,
+                kFadeActionNumColors, fade_in);
   }
 
-  return fading;
+  UWORD* cop_rows = &cop_lists[g.cop_list_back][g.cop_list_rows_start];
+
+  UWORD start_y = kDispWinY + kDrawTop;
+  UWORD stop_y = kDispWinY + kDispHeight;
+  UWORD cop_rows_offset = 19;
+
+  for (UWORD i = 0; i < kDrawHeight; ++ i) {
+    UWORD disp_y = i + kDispWinY + kDrawTop;
+
+    cop_rows_offset += 20 + (disp_y == 0x100 ? 2 : 0);
+    cop_rows[cop_rows_offset] = g.colors[44 + ((kDrawTop + i) >> 5)];
+  }
 }
 
 static BOOL fade_common(UWORD* colors_lo,
@@ -332,9 +344,8 @@ VOID gfx_update_display(TrackStep *step_near,
                         WORD player_x,
                         ULONG camera_z,
                         UWORD score_frac) {
-  static UWORD back_view_idx = 1;
-  UWORD* cop_list = cop_lists[back_view_idx];
-  back_view_idx ^= 1;
+  UWORD* cop_list = cop_lists[g.cop_list_back];
+  g.cop_list_back ^= 1;
 
   update_score(cop_list, score_frac);
 
@@ -546,8 +557,6 @@ static Status make_copperlists() {
   *(cl ++) = ((kDispWinY + kDispHdrHeight - 2) << 8) | 0x1;
   *(cl ++) = 0xFFFE;
 
-  g.cop_list_body_colors_idx = cl - cop_lists[0];
-
   for (UWORD i = 1; i < 8; ++ i) {
     *(cl ++) = mCustomOffset(color[i]);
     *(cl ++) = 0;
@@ -556,6 +565,8 @@ static Status make_copperlists() {
   // One extra row to set modulus for first draw line.
   UWORD start_y = kDispWinY + kDrawTop - 1;
   UWORD stop_y = kDispWinY + kDispHeight;
+
+  g.cop_list_rows_start = cl - cop_lists[0];
 
   for (UWORD disp_y = start_y; disp_y < stop_y; ++ disp_y) {
     if (disp_y == 0x100) {
@@ -583,7 +594,7 @@ static Status make_copperlists() {
     *(cl ++) = mCustomOffset(color[5]);
     *(cl ++) = 0;
     *(cl ++) = mCustomOffset(color[6]);
-    *(cl ++) = (0x8 * (disp_y - start_y)) / (stop_y - start_y);
+    *(cl ++) = 0;
   }
 
   g.cop_list_rows_end = cl - cop_lists[0];

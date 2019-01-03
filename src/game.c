@@ -143,9 +143,7 @@ VOID game_action_loop() {
     if (fade_frames) {
       -- fade_frames;
 
-      if (fade_frames & 1) {
-        gfx_fade_action(running);
-      }
+      gfx_fade_action(running, ((fade_frames & 1) == 0) ? TRUE : FALSE);
 
       if (! running) {
         mt_mastervol(&custom, fade_frames * (kVolumeMax / kNumFadeFrames));

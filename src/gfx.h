@@ -39,7 +39,8 @@ extern VOID gfx_draw_logo();
 extern VOID gfx_draw_title(STRPTR title);
 extern VOID gfx_init_score();
 extern VOID gfx_fade_menu(BOOL fade_in);
-extern BOOL gfx_fade_action(BOOL fade_in);
+extern VOID gfx_fade_action(BOOL fade_in,
+                            BOOL delay_fade);
 extern VOID gfx_clear_body();
 extern VOID gfx_draw_track();
 extern VOID gfx_update_display(TrackStep *step_near,
