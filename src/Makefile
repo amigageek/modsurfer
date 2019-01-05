@@ -1,21 +1,42 @@
-CC             = m68k-amigaos-gcc
-CFLAGS         = -O3 -m68000 -fomit-frame-pointer -mregparm=4
-LDFLAGS        = -s
-OUTDIR         = build
-DEPFLAGS       = -MT $@ -MMD -MP -MF $(OUTDIR)/$*.Td
+# -*- tab-width: 8; indent-tabs-mode: t; -*-
 
-GENTABLES      = $(OUTDIR)/gentables
-GENTABLES_SRCS = gentables.c
-TABLES_HDR     = $(OUTDIR)/tables.h
+AS		= vasmm68k_mot
+ASFLAGS		= -DMODSURFER -Faout
+CC		= m68k-amigaos-gcc
+CFLAGS		= -O3 -fomit-frame-pointer -s -m68000 -mregparm=4
+DEPFLAGS	= -MT $@ -MMD -MP -MF $(OUTDIR)/$*.Td
+OUTDIR		= build
 
-GENIMAGES      = $(OUTDIR)/genimages
-GENIMAGES_SRCS = genimages.c
-IMAGES_HDR     = $(OUTDIR)/images.h
-IMAGES         = images/font.iff images/logo.iff images/pointer.iff images/ball.iff
+GENTABLES	= $(OUTDIR)/gentables
+GENTABLES_SRCS	= gentables.c
+TABLES_HDR	= $(OUTDIR)/tables.h
 
-MODSURFER      = $(OUTDIR)/modsurfer
-MODSURFER_SRCS = blit.c common.c dtypes.c game.c gfx.c gfx_opt.asm keyboard.asm main.c menu.c module.c ptplayer/ptplayer.asm system.c track.c
-MODSURFER_OBJS = $(patsubst %, $(OUTDIR)/%.o, $(basename $(MODSURFER_SRCS)))
+GENIMAGES	= $(OUTDIR)/genimages
+GENIMAGES_SRCS	= genimages.c
+IMAGES_HDR	= $(OUTDIR)/images.h
+IMAGES		=		\
+	ball.iff		\
+	font.iff		\
+	logo.iff		\
+	pointer.iff
+IMAGES_SRCS	= $(addprefix images/, $(IMAGES))
+
+MODSURFER	= $(OUTDIR)/modsurfer
+MODSURFER_SRCS	=		\
+	blit.c			\
+	common.c		\
+	dtypes.c		\
+	game.c			\
+	gfx.c			\
+	gfx.asm			\
+	main.c			\
+	menu.c			\
+	module.c		\
+	ptplayer/ptplayer.asm	\
+	system.c		\
+	system.asm		\
+	track.c
+MODSURFER_OBJS	= $(patsubst %, $(OUTDIR)/%.o, $(MODSURFER_SRCS))
 
 $(shell mkdir -p $(OUTDIR)/ptplayer >/dev/null)
 
@@ -24,29 +45,24 @@ all: $(MODSURFER)
 clean:
 	rm -fr $(OUTDIR)
 
-dist:
-	cp -f $(MODSURFER) ..
-
 $(MODSURFER): $(MODSURFER_OBJS)
-	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS)
 
-$(OUTDIR)/%.o : %.c $(OUTDIR)/%.d
+$(OUTDIR)/%.c.o : %.c $(OUTDIR)/%.d
 	$(CC) $(DEPFLAGS) $(CFLAGS) -c -o $@ $<
 	@mv -f $(OUTDIR)/$*.Td $(OUTDIR)/$*.d && touch $@
 
-$(OUTDIR)/%.o : %.asm
-	vasmm68k_mot -DMODSURFER -Faout -o $@ $<
+$(OUTDIR)/%.asm.o : %.asm
+	$(AS) $(ASFLAGS) -o $@ $<
 
-$(OUTDIR)/gfx.o: $(IMAGES_HDR)
+$(OUTDIR)/gfx.c.o: $(IMAGES_HDR)
+$(OUTDIR)/track.c.o: $(TABLES_HDR)
+
+$(IMAGES_HDR): $(GENIMAGES) $(IMAGES_SRCS)
+	$(GENIMAGES) > $@
 
 $(TABLES_HDR): $(GENTABLES)
 	$(GENTABLES) > $@
-
-# FIXME FIXME FIXME FIXME FIXME
-$(OUTDIR)/track.o: $(TABLES_HDR)
-
-$(IMAGES_HDR): $(GENIMAGES) $(IMAGES)
-	$(GENIMAGES) > $@
 
 $(GENTABLES): $(GENTABLES_SRCS)
 	cc -o $@ $^ -lm
