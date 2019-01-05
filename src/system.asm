@@ -9,6 +9,7 @@ CIACRA_SPMODE 		= 1<<6
 
 	section	code
 	public	_level2_int
+	public	_key_state
 
 _level2_int:
 	;; Check if this is a PORTS interrupt
@@ -53,9 +54,6 @@ _level2_int:
 
 	movem.l	(sp)+,d0-d1/a0-a2
 	rte
-
-	section	bss
-	public	_key_state
 
 _key_state:
 	ds.b	$80

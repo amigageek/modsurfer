@@ -4,24 +4,23 @@ AS		= vasmm68k_mot
 ASFLAGS		= -DMODSURFER -Faout
 CC		= m68k-amigaos-gcc
 CFLAGS		= -O3 -fomit-frame-pointer -s -m68000 -mregparm=4
-DEPFLAGS	= -MT $@ -MMD -MP -MF $(OUTDIR)/$*.Td
-OUTDIR		= build
+DEPFLAGS	= -MT $@ -MMD -MP -MF $(BUILDDIR)/$*.Td
+BUILDDIR		= build
 
-GENTABLES	= $(OUTDIR)/gentables
+GENTABLES	= $(BUILDDIR)/gentables
 GENTABLES_SRCS	= gentables.c
-TABLES_HDR	= $(OUTDIR)/tables.h
+TABLES_HDR	= $(BUILDDIR)/tables.h
 
-GENIMAGES	= $(OUTDIR)/genimages
+GENIMAGES	= $(BUILDDIR)/genimages
 GENIMAGES_SRCS	= genimages.c
-IMAGES_HDR	= $(OUTDIR)/images.h
+IMAGES_HDR	= $(BUILDDIR)/images.h
 IMAGES		=		\
-	ball.iff		\
 	font.iff		\
 	logo.iff		\
 	pointer.iff
 IMAGES_SRCS	= $(addprefix images/, $(IMAGES))
 
-MODSURFER	= $(OUTDIR)/modsurfer
+MODSURFER	= $(BUILDDIR)/modsurfer
 MODSURFER_SRCS	=		\
 	blit.c			\
 	common.c		\
@@ -36,27 +35,27 @@ MODSURFER_SRCS	=		\
 	system.c		\
 	system.asm		\
 	track.c
-MODSURFER_OBJS	= $(patsubst %, $(OUTDIR)/%.o, $(MODSURFER_SRCS))
+MODSURFER_OBJS	= $(patsubst %, $(BUILDDIR)/%.o, $(MODSURFER_SRCS))
 
-$(shell mkdir -p $(OUTDIR)/ptplayer >/dev/null)
+$(shell mkdir -p $(BUILDDIR)/ptplayer >/dev/null)
 
 all: $(MODSURFER)
 
 clean:
-	rm -fr $(OUTDIR)
+	rm -fr $(BUILDDIR)
 
 $(MODSURFER): $(MODSURFER_OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
 
-$(OUTDIR)/%.c.o : %.c $(OUTDIR)/%.d
+$(BUILDDIR)/%.c.o : %.c $(BUILDDIR)/%.d
 	$(CC) $(DEPFLAGS) $(CFLAGS) -c -o $@ $<
-	@mv -f $(OUTDIR)/$*.Td $(OUTDIR)/$*.d && touch $@
+	@mv -f $(BUILDDIR)/$*.Td $(BUILDDIR)/$*.d && touch $@
 
-$(OUTDIR)/%.asm.o : %.asm
+$(BUILDDIR)/%.asm.o : %.asm
 	$(AS) $(ASFLAGS) -o $@ $<
 
-$(OUTDIR)/gfx.c.o: $(IMAGES_HDR)
-$(OUTDIR)/track.c.o: $(TABLES_HDR)
+$(BUILDDIR)/gfx.c.o: $(IMAGES_HDR)
+$(BUILDDIR)/track.c.o: $(TABLES_HDR)
 
 $(IMAGES_HDR): $(GENIMAGES) $(IMAGES_SRCS)
 	$(GENIMAGES) > $@
@@ -70,8 +69,8 @@ $(GENTABLES): $(GENTABLES_SRCS)
 $(GENIMAGES): $(GENIMAGES_SRCS)
 	cc -o $@ $^
 
-$(OUTDIR)/%.d: ;
+$(BUILDDIR)/%.d: ;
 
-.PRECIOUS: $(OUTDIR)/%.d
+.PRECIOUS: $(BUILDDIR)/%.d
 
-include $(wildcard $(patsubst %, $(OUTDIR)/%.d, $(basename $(MODSURFER_SRCS))))
+include $(wildcard $(patsubst %, $(BUILDDIR)/%.d, $(basename $(MODSURFER_SRCS))))
