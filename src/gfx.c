@@ -80,7 +80,7 @@ static struct {
 static UWORD disp_planes[kDispDepth][kDispHeight + kDispColPad][kDispStride / kBytesPerWord] __chip;
 static UWORD cop_lists[2][kDispCopSizeWords] __chip;
 static UWORD null_spr[2] __chip;
-static UWORD ship_sprs[4][ship_height + 2][2] __chip;
+static UWORD ball_sprs[4][ball_height + 2][2] __chip;
 
 Status gfx_init() {
   Status status = StatusOK;
@@ -496,7 +496,7 @@ static Status make_copperlists() {
   UWORD* cl = cop_lists[0];
 
   for (UWORD spr = 0; spr < 8; ++ spr) {
-    ULONG spr_addr = (ULONG)(spr < 4 ? &ship_sprs[spr][0][0] : null_spr);
+    ULONG spr_addr = (ULONG)(spr < 4 ? &ball_sprs[spr][0][0] : null_spr);
 
     *(cl ++) = mCustomOffset(sprpt[spr]);
     *(cl ++) = HI16(spr_addr);
@@ -697,17 +697,17 @@ cleanup:
 }
 
 static VOID make_sprites() {
-  UWORD* spr_data = ship_planes;
+  UWORD* spr_data = ball_planes;
 
-  for (UWORD y = 0; y < ship_height; ++ y) {
-    ship_sprs[0][1 + y][0] = *(spr_data ++);
-    ship_sprs[2][1 + y][0] = *(spr_data ++);
-    ship_sprs[0][1 + y][1] = *(spr_data ++);
-    ship_sprs[2][1 + y][1] = *(spr_data ++);
-    ship_sprs[1][1 + y][0] = *(spr_data ++);
-    ship_sprs[3][1 + y][0] = *(spr_data ++);
-    ship_sprs[1][1 + y][1] = *(spr_data ++);
-    ship_sprs[3][1 + y][1] = *(spr_data ++);
+  for (UWORD y = 0; y < ball_height; ++ y) {
+    ball_sprs[0][1 + y][0] = *(spr_data ++);
+    ball_sprs[2][1 + y][0] = *(spr_data ++);
+    ball_sprs[0][1 + y][1] = *(spr_data ++);
+    ball_sprs[2][1 + y][1] = *(spr_data ++);
+    ball_sprs[1][1 + y][0] = *(spr_data ++);
+    ball_sprs[3][1 + y][0] = *(spr_data ++);
+    ball_sprs[1][1 + y][1] = *(spr_data ++);
+    ball_sprs[3][1 + y][1] = *(spr_data ++);
   }
 }
 
@@ -760,14 +760,14 @@ static VOID update_sprite_pos(UWORD player_x) {
   UWORD y = ((y_frac - kNearZ) * kDrawHeight) / (0x10000 - kNearZ) + (kDispHeight - kDrawHeight) - 8;
 
   UWORD hstart_left = (kDispWinX & ~1) + player_x - 8;
-  UWORD vstart = kDispWinY + y + (ship_height / 2);
-  UWORD vstop = vstart + ship_height;
+  UWORD vstart = kDispWinY + y + (ball_height / 2);
+  UWORD vstop = vstart + ball_height;
 
   UWORD spr_ctl_0 = (vstart & 0xFF) << SPRxPOS_SV0_Shf;
   UWORD spr_ctl_1 = ((vstop & 0xFF) << SPRxCTL_EV0_Shf) | ((vstart >> 8) << SPRxCTL_SV8_Shf) | ((vstop >> 8) << SPRxCTL_EV8_Shf);
 
   for (UWORD spr_idx = 0; spr_idx < 4; ++ spr_idx) {
-    UWORD* spr = &ship_sprs[spr_idx][0][0];
+    UWORD* spr = &ball_sprs[spr_idx][0][0];
     UWORD hstart = hstart_left + ((spr_idx & 2) ? 8 : -8);
 
     spr[0] = spr_ctl_0 | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_Shf);

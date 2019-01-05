@@ -218,7 +218,7 @@ int main() {
   CHECK(make_img_array("logo", true));
   CHECK(make_img_array("font", true));
   CHECK(make_img_array("pointer", true));
-  CHECK(make_img_array("ship", false));
+  CHECK(make_img_array("ball", false));
 
 cleanup:
   return ret ? 0 : 1;
