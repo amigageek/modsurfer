@@ -1,5 +1,6 @@
 #include "gfx.h"
 #include "blit.h"
+#include "build/ball.h"
 #include "build/images.h"
 #include "custom.h"
 #include "menu.h"
@@ -32,6 +33,7 @@
 #define kBorderWidth 10
 #define kHeaderPalette 0xB8C, 0x425, 0x94A
 #define kFadeActionNumColors 52
+#define kBallEdge 0x20
 
 extern VOID update_coplist(UWORD* colors __asm("a2"),
                            UWORD* cop_row __asm("a3"),
@@ -49,10 +51,9 @@ static Status make_window();
 static Status make_copperlists();
 static UWORD* make_copperlist_score(UWORD* cl);
 static Status make_view();
-static VOID make_sprites();
 static VOID make_z_incs();
 static VOID get_display_window(struct ViewPort* viewport, UWORD* diwstrt, UWORD* diwstop, UWORD* diwhigh);
-static VOID update_sprite_pos(UWORD player_x);
+static VOID update_sprite(UWORD* cop_list, UWORD player_x);
 static VOID update_sprite_colors(UWORD* cop_list,
                                  ULONG camera_z);
 static VOID update_score(UWORD* cop_list,
@@ -77,10 +78,12 @@ static struct {
   UWORD colors[kFadeActionNumColors];
 } g;
 
-static UWORD disp_planes[kDispDepth][kDispHeight + kDispColPad][kDispStride / kBytesPerWord] __chip;
-static UWORD cop_lists[2][kDispCopSizeWords] __chip;
-static UWORD null_spr[2] __chip;
-static UWORD ball_sprs[4][ball_height + 2][2] __chip;
+// Prevent BSS section merging with .data_chip
+#define __chip_bss __attribute__((section(".bsschip")))
+
+static UWORD disp_planes[kDispDepth][kDispHeight + kDispColPad][kDispStride / kBytesPerWord] __chip_bss;
+static UWORD cop_lists[2][kDispCopSizeWords] __chip_bss;
+static UWORD null_spr[2] __chip_bss;
 
 Status gfx_init() {
   Status status = StatusOK;
@@ -90,7 +93,6 @@ Status gfx_init() {
   ASSERT(make_window());
   ASSERT(make_copperlists());
   ASSERT(make_view());
-  make_sprites();
   make_z_incs();
 
 cleanup:
@@ -352,7 +354,7 @@ VOID gfx_update_display(TrackStep *step_near,
   WORD player_sx = (player_x * (kNumVisibleSteps - kNumStepsDelay)) / kNumVisibleSteps;
   WORD camera_x = (player_sx * 74) / 100;
 
-  update_sprite_pos((kDispWidth / 2) + (player_sx - camera_x));
+  update_sprite(cop_list, (kDispWidth / 2) + (player_sx - camera_x));
   update_sprite_colors(cop_list, camera_z);
 
   WORD shift_start_x = - camera_x;
@@ -496,12 +498,10 @@ static Status make_copperlists() {
   UWORD* cl = cop_lists[0];
 
   for (UWORD spr = 0; spr < 8; ++ spr) {
-    ULONG spr_addr = (ULONG)(spr < 4 ? &ball_sprs[spr][0][0] : null_spr);
-
     *(cl ++) = mCustomOffset(sprpt[spr]);
-    *(cl ++) = HI16(spr_addr);
+    *(cl ++) = HI16(null_spr);
     *(cl ++) = mCustomOffset(sprpt[spr]) + kBytesPerWord;
-    *(cl ++) = LO16(spr_addr);
+    *(cl ++) = LO16(null_spr);
   }
 
   UWORD hdr_pal[] = { kHeaderPalette };
@@ -696,21 +696,6 @@ cleanup:
   return status;
 }
 
-static VOID make_sprites() {
-  UWORD* spr_data = ball_planes;
-
-  for (UWORD y = 0; y < ball_height; ++ y) {
-    ball_sprs[0][1 + y][0] = *(spr_data ++);
-    ball_sprs[2][1 + y][0] = *(spr_data ++);
-    ball_sprs[0][1 + y][1] = *(spr_data ++);
-    ball_sprs[2][1 + y][1] = *(spr_data ++);
-    ball_sprs[1][1 + y][0] = *(spr_data ++);
-    ball_sprs[3][1 + y][0] = *(spr_data ++);
-    ball_sprs[1][1 + y][1] = *(spr_data ++);
-    ball_sprs[3][1 + y][1] = *(spr_data ++);
-  }
-}
-
 static VOID make_z_incs() {
   UWORD prev_z = kNearZ;
 
@@ -754,24 +739,44 @@ static VOID get_display_window(struct ViewPort* viewport,
   }
 }
 
-static VOID update_sprite_pos(UWORD player_x) {
+static VOID update_sprite(UWORD* cop_list,
+                          UWORD player_x) {
   // FIXME: y_frac naming (not fraction of draw height)
   UWORD y_frac = ((kNearZ - 1) << 0x10) / kPlayerZ;
   UWORD y = ((y_frac - kNearZ) * kDrawHeight) / (0x10000 - kNearZ) + (kDispHeight - kDrawHeight) - 8;
 
   UWORD hstart_left = (kDispWinX & ~1) + player_x - 8;
-  UWORD vstart = kDispWinY + y + (ball_height / 2);
-  UWORD vstop = vstart + ball_height;
+  UWORD vstart = kDispWinY + y + (kBallEdge / 2);
+  UWORD vstop = vstart + kBallEdge;
 
   UWORD spr_ctl_0 = (vstart & 0xFF) << SPRxPOS_SV0_Shf;
   UWORD spr_ctl_1 = ((vstop & 0xFF) << SPRxCTL_EV0_Shf) | ((vstart >> 8) << SPRxCTL_SV8_Shf) | ((vstop >> 8) << SPRxCTL_EV8_Shf);
 
+  static UWORD last_player_x = 0;
+  static UWORD spr_frame = kBallNumAngles;
+  WORD player_x_delta = player_x - last_player_x;
+
+  last_player_x = player_x;
+
+  if (player_x_delta == 0) {
+    spr_frame += MIN(1, MAX(-1, kBallNumAngles - spr_frame));
+  }
+  else if (player_x_delta < 0) {
+    spr_frame = MAX(spr_frame - 1, 0);
+  }
+  else {
+    spr_frame = MIN(spr_frame + 1, kBallNumAngles * 2);
+  }
+
   for (UWORD spr_idx = 0; spr_idx < 4; ++ spr_idx) {
-    UWORD* spr = &ball_sprs[spr_idx][0][0];
+    UWORD* spr = &ball_sprs[spr_frame][spr_idx][0][0];
     UWORD hstart = hstart_left + ((spr_idx & 2) ? 8 : -8);
 
     spr[0] = spr_ctl_0 | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_Shf);
     spr[1] = spr_ctl_1 | ((hstart & 0x1) << SPRxCTL_SH0_Shf) | ((spr_idx & 1) << SPRxCTL_ATT_Shf);
+
+    cop_list[(spr_idx * 4) + 1] = HI16(spr);
+    cop_list[(spr_idx * 4) + 3] = LO16(spr);
   }
 }
 

@@ -20,6 +20,10 @@ IMAGES		=		\
 	pointer.iff
 IMAGES_SRCS	= $(addprefix images/, $(IMAGES))
 
+GENBALL		= $(BUILDDIR)/genball
+GENBALL_SRCS	= genball.c
+BALL_HDR	= $(BUILDDIR)/ball.h
+
 MODSURFER	= $(BUILDDIR)/modsurfer
 MODSURFER_SRCS	=		\
 	blit.c			\
@@ -54,7 +58,7 @@ $(BUILDDIR)/%.c.o : %.c $(BUILDDIR)/%.d
 $(BUILDDIR)/%.asm.o : %.asm
 	$(AS) $(ASFLAGS) -o $@ $<
 
-$(BUILDDIR)/gfx.c.o: $(IMAGES_HDR)
+$(BUILDDIR)/gfx.c.o: $(IMAGES_HDR) $(BALL_HDR)
 $(BUILDDIR)/track.c.o: $(TABLES_HDR)
 
 $(IMAGES_HDR): $(GENIMAGES) $(IMAGES_SRCS)
@@ -69,8 +73,16 @@ $(GENTABLES): $(GENTABLES_SRCS)
 $(GENIMAGES): $(GENIMAGES_SRCS)
 	cc -o $@ $^
 
+$(BALL_HDR): $(GENBALL)
+	$(GENBALL) > $@
+
+$(GENBALL): $(GENBALL_SRCS)
+	cc -o $@ $^ -lm
+
 $(BUILDDIR)/%.d: ;
 
 .PRECIOUS: $(BUILDDIR)/%.d
 
 include $(wildcard $(patsubst %, $(BUILDDIR)/%.d, $(basename $(MODSURFER_SRCS))))
+
+.PHONY: dist
