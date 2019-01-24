@@ -803,7 +803,7 @@ static VOID update_sprite_colors(UWORD* cop_list,
   }
 
   UWORD cycle_count = camera_z >> kColorCycleZShift;
-  UWORD cycle_shift = cycle_count - last_cycle_count;
+  UWORD cycle_shift = MAX(0, MIN(3, cycle_count - last_cycle_count));
   last_cycle_count = cycle_count;
 
   color_mask = ((color_mask << cycle_shift) | (color_mask >> (kColorCycleNum - cycle_shift)));
