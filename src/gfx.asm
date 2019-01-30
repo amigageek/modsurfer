@@ -3,6 +3,7 @@
 	section	code
 	public	_update_coplist
 
+	;; a0: UWORD z_until_vu
 	;; a1: UWORD shift_err_inc
 	;; a2: UWORD* colors
 	;; a3: UWORD* cop_row
@@ -12,13 +13,14 @@
 	;; d3: UWORD step_frac, UWORD shift_err
 	;; d4: WORD shift_inc, WORD shift_x
 	;; d5: TrackStep step_data
-	;; d6: UWORD z
+	;; d6: ULONG z
 	;; d7: UWORD loop_count_top, UWORD loop_count_bottom
 
 	macro	scanline_loop
 .prev_scanline_\@:
+	moveq	#0,d0
 	move.w	(a4)+,d0	; z_inc = *(z_incs ++)
-	add.w	d0,d6		; z += z_inc
+	add.l	d0,d6		; z += z_inc
 	add.w	d0,d3		; step_frac += z_inc
 	move.w	#$DB6,d0	; kBlockGapDepth
 	cmp.w	d0,d3
@@ -63,7 +65,12 @@
 	move.w	d0,$16(a3)	; COLOR2
 	move.w	d0,$1A(a3)	; COLOR3
 	move.w	d0,$1E(a3)	; COLOR4
-	move.w	d1,$22(a3)	; COLOR5
+
+	cmp.l	a0,d6
+	bgt	.set_border_\@	; z > vu_meter_z
+	moveq	#6,d0		; offset to vu_meter color
+.set_border_\@:
+	move.w	$30(a2,d0.w),$22(a3)	; COLOR5 = vu_meter or dark
 
 	move.w	d5,d1		; step_data
 	rol.w	#$4,d1		; 12'X, step_data.active_lane, 2'X

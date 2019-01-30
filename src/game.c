@@ -68,6 +68,9 @@ VOID game_action_loop() {
   UWORD num_blocks = track_get_num_blocks();
   UWORD num_blocks_passed = 0;
   UWORD score = 0;
+  static UWORD vu_meter_vz; // work around compiler bug
+
+  vu_meter_vz = 0;
 
   system_acquire_control();
   gfx_draw_track();
@@ -138,6 +141,7 @@ VOID game_action_loop() {
       collect_step->color += 12;
       ms_SuppressSample = 0xFF;
       ++ score;
+      vu_meter_vz = kFarZ;
     }
 
     if (fade_frames) {
@@ -150,8 +154,11 @@ VOID game_action_loop() {
       }
     }
 
+    ULONG vu_meter_z = vu_meter_vz + camera_z;
+    vu_meter_vz = MAX(0, vu_meter_vz - 0x1000);
+
     UWORD score_frac = (score * 1000) / num_blocks;
-    gfx_update_display(&steps[next_step_idx], player_x, camera_z, score_frac);
+    gfx_update_display(&steps[next_step_idx], player_x, camera_z, camera_z_inc, vu_meter_z, score_frac);
 
     camera_z += camera_z_inc;
 

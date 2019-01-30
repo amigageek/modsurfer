@@ -30,10 +30,11 @@
 #define kPlayerZ (kNearZ + (kNumStepsDelay * kBlockGapDepth))
 #define kBlockWidth ((3 * kLaneWidth) / 5)
 #define kStripeWidth 4
-#define kBorderWidth 10
+#define kBorderWidth 15
 #define kHeaderPalette 0xB8C, 0x425, 0x94A
 #define kFadeActionNumColors 52
 #define kBallEdge 0x20
+#define kBallAngleLimit (((((kBallNumAngles * 2) + 1) << 11) / 2) - 1)
 
 extern VOID update_coplist(UWORD* colors __asm("a2"),
                            UWORD* cop_row __asm("a3"),
@@ -41,6 +42,7 @@ extern VOID update_coplist(UWORD* colors __asm("a2"),
                            TrackStep* step_near __asm("a6"),
                            ULONG step_frac __asm("d3"),
                            ULONG shift_params __asm("d4"),
+                           ULONG vu_meter_z __asm("a0"),
                            UWORD shift_err_inc __asm("a1"),
                            ULONG z __asm("d6"),
                            ULONG loop_counts __asm("d7"));
@@ -53,7 +55,7 @@ static UWORD* make_copperlist_score(UWORD* cl);
 static Status make_view();
 static VOID make_z_incs();
 static VOID get_display_window(struct ViewPort* viewport, UWORD* diwstrt, UWORD* diwstop, UWORD* diwhigh);
-static VOID update_sprite(UWORD* cop_list, UWORD player_x);
+static VOID update_sprite(UWORD* cop_list, UWORD player_x, UWORD camera_z_inc);
 static VOID update_sprite_colors(UWORD* cop_list,
                                  ULONG camera_z);
 static VOID update_score(UWORD* cop_list,
@@ -224,7 +226,7 @@ VOID gfx_fade_action(BOOL fade_in,
   static UWORD colors_hi[kFadeActionNumColors] = {
     0x810, 0x910, 0xA20, 0xB20, 0xB30, 0xC40, 0xD50, 0xD60, 0xD70, 0xE80, 0xE90, 0xFA0,
     0x300, 0x300, 0x310, 0x310, 0x310, 0x410, 0x420, 0x420, 0x420, 0x430, 0x430, 0x530,
-    0x606, 0x909, 0xDAA, 0x404,
+    0x303, 0x909, 0xDAA, 0x704,
     0x505, 0x606, 0x606, 0x707, 0x707, 0x808, 0x909, 0x909,
     0xA0A, 0x909, 0x808, 0x808, 0x707, 0x707, 0x606, 0x505,
     0x000, 0x001, 0x002, 0x003, 0x004, 0x005, 0x006, 0x007,
@@ -345,6 +347,8 @@ VOID gfx_draw_track() {
 VOID gfx_update_display(TrackStep *step_near,
                         WORD player_x,
                         ULONG camera_z,
+                        UWORD camera_z_inc,
+                        ULONG vu_meter_z,
                         UWORD score_frac) {
   UWORD* cop_list = cop_lists[g.cop_list_back];
   g.cop_list_back ^= 1;
@@ -354,7 +358,7 @@ VOID gfx_update_display(TrackStep *step_near,
   WORD player_sx = (player_x * (kNumVisibleSteps - kNumStepsDelay)) / kNumVisibleSteps;
   WORD camera_x = (player_sx * 74) / 100;
 
-  update_sprite(cop_list, (kDispWidth / 2) + (player_sx - camera_x));
+  update_sprite(cop_list, (kDispWidth / 2) + (player_sx - camera_x), camera_z_inc);
   update_sprite_colors(cop_list, camera_z);
 
   WORD shift_start_x = - camera_x;
@@ -379,7 +383,8 @@ VOID gfx_update_display(TrackStep *step_near,
     (kDispWinY + kDispHeight - 1 - 0x100);
 
   ULONG shift_params = (shift_start_x & 0xFFFF) | (shift_x_inc << 0x10);
-  update_coplist(g.colors, cop_row, g.z_incs, step_near, step_frac, shift_params, shift_err_inc, z, loop_counts);
+  update_coplist(g.colors, cop_row, g.z_incs, step_near, step_frac, shift_params,
+                 vu_meter_z, shift_err_inc, z, loop_counts);
 
   custom.cop1lc = (ULONG)cop_list;
 }
@@ -740,7 +745,8 @@ static VOID get_display_window(struct ViewPort* viewport,
 }
 
 static VOID update_sprite(UWORD* cop_list,
-                          UWORD player_x) {
+                          UWORD player_x,
+                          UWORD camera_z_inc) {
   // FIXME: y_frac naming (not fraction of draw height)
   UWORD y_frac = ((kNearZ - 1) << 0x10) / kPlayerZ;
   UWORD y = ((y_frac - kNearZ) * kDrawHeight) / (0x10000 - kNearZ) + (kDispHeight - kDrawHeight) - 8;
@@ -753,20 +759,21 @@ static VOID update_sprite(UWORD* cop_list,
   UWORD spr_ctl_1 = ((vstop & 0xFF) << SPRxCTL_EV0_Shf) | ((vstart >> 8) << SPRxCTL_SV8_Shf) | ((vstop >> 8) << SPRxCTL_EV8_Shf);
 
   static UWORD last_player_x = 0;
-  static UWORD spr_frame = kBallNumAngles;
-  WORD player_x_delta = player_x - last_player_x;
-
+  WORD player_dx = player_x - last_player_x;
   last_player_x = player_x;
 
-  if (player_x_delta == 0) {
-    spr_frame += MIN(1, MAX(-1, kBallNumAngles - spr_frame));
-  }
-  else if (player_x_delta < 0) {
-    spr_frame = MAX(spr_frame - 1, 0);
+  static WORD ball_angle = 0;
+  WORD ball_angle_bound = (player_dx < 0 ? -kBallAngleLimit : (player_dx > 0 ? kBallAngleLimit : 0));
+  UWORD ball_angle_inc = camera_z_inc << 1;
+
+  if ((player_dx < 0) || (player_dx == 0 && ball_angle > 0)) {
+    ball_angle = MAX(ball_angle_bound, ball_angle - ball_angle_inc);
   }
   else {
-    spr_frame = MIN(spr_frame + 1, kBallNumAngles * 2);
+    ball_angle = MIN(ball_angle_bound, ball_angle + ball_angle_inc);
   }
+
+  UWORD spr_frame = (ball_angle + (kBallAngleLimit + 1)) >> 11;
 
   for (UWORD spr_idx = 0; spr_idx < 4; ++ spr_idx) {
     UWORD* spr = &ball_sprs[spr_frame][spr_idx][0][0];

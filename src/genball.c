@@ -10,7 +10,7 @@
 #define kNumSpritesPerFrame 4
 #define kNumFrameAngles 8
 #define kNumFrames (kNumFrameAngles * 2 + 1)
-#define kMaxAngle 1.0
+#define kMaxAngle 1.1
 #define kAngleStep (kMaxAngle / kNumFrameAngles)
 
 typedef struct {
