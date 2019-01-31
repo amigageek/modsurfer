@@ -1,0 +1,12 @@
+This directory contains the source code for the Amiga game ModSurfer.
+To read more about the game head over to the following URL:
+
+https://amigageek.com/modsurfer
+
+The source code can be cross-compiled with the Amiga GCC port.
+The currently maintained port can be found here:
+
+https://github.com/bebbo/amiga-gcc
+
+The build system also requires a native C compiler, invoked as 'cc'.
+Start the build with GNU make in the top-level directory.

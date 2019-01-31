@@ -1,0 +1,42 @@
+Short:        3D rhythm game for your MOD collection
+Author:       arcanist@amigageek.com
+Uploader:     arcanist@amigageek.com
+Type:         game/misc
+Architecture: m68k-amigaos >= 1.2
+Requires:     OCS PAL, 68000, 512K, or better
+URL:          https://amigageek.com/modsurfer
+Version:      1.0
+
+ModSurfer is a rhythm game inspired by the PC title AudioSurf. Select a
+MOD music file from your collection and a 3D track will created for you
+to surf on. Roll over the tiles on the ground to score points and keep the
+music going. Miss a tile and the instrument won't play, making a right mess
+of the music!
+
+Use the file browser to select a MOD file and click the Start Game button.
+Move left/right with the mouse. You can exit a track early by pressing
+the Escape key. You can also return to Workbench from the menu with the
+Escape key.
+
+This game can be run from a hard disk after unpacking the archive. If you
+prefer to play from floppy, or have limited RAM, there is a bootable ADF
+image included in the archive. Larger MODs may require more chip RAM to load.
+
+No MOD collection? Not a problem! You can find a set of curated MOD files
+in LHA and ADF format at the URL below. The fast tracks are guaranteed to
+get your foot tapping and your heart pumping!
+
+https://amigageek.com/modsurfer
+
+This game is a product of the English Amiga Board (EAB) game development
+competition in 2018. It began as an experiment in lead instrument detection
+using a mix of spectral analysis and information in the MOD pattern data,
+but grew into something much more beautiful.
+
+Source code (mixed C/assembly) is included in the archive and can be browsed
+at the URL below. It is cross-compiled using the Amiga GCC port, which is
+currently maintained by bebbo. ModSurfer uses a modified version of the
+ptplayer MOD replayer library (mus/play/ptplayer), without which this project
+would not have been possible.
+
+https://github.com/amigageek/modsurfer
