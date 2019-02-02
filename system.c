@@ -3,6 +3,8 @@
 #include "gfx.h"
 #include "ptplayer/ptplayer.h"
 
+#include <clib/alib_protos.h>
+#include <devices/timer.h>
 #include <dos/dosextens.h>
 #include <dos/filehandler.h>
 #include <exec/execbase.h>
@@ -284,4 +286,31 @@ static VOID set_intreq(UWORD intreq) {
   for (UWORD i = 0; i < 2; ++ i) {
     custom.intreq = intreq;
   }
+}
+
+Status system_random_seed(UWORD* seed) {
+  Status status = StatusOK;
+  struct MsgPort* port = NULL;
+  struct timerequest* timer_io = NULL;
+
+  ASSERT(port = CreatePort(NULL, 0));
+  ASSERT(timer_io = (struct timerequest*)CreateExtIO(port, sizeof(struct timerequest)));
+  ASSERT(OpenDevice("timer.device", UNIT_VBLANK, (struct IORequest*)timer_io, 0) == 0);
+
+  timer_io->tr_node.io_Command = TR_GETSYSTIME;
+  DoIO((struct IORequest*)timer_io);
+
+  *seed = (UWORD)timer_io->tr_time.tv_micro;
+
+cleanup:
+  if (timer_io) {
+    CloseDevice((struct IORequest*)timer_io);
+    DeleteExtIO((struct IORequest*)timer_io);
+  }
+
+  if (port) {
+    DeletePort(port);
+  }
+
+  return status;
 }

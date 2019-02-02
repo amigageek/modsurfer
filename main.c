@@ -12,7 +12,7 @@ int main() {
 
   common_init();
   ASSERT(system_init());
-  track_init();
+  ASSERT(track_init());
   ASSERT(gfx_init());
   ASSERT(menu_init());
   ASSERT(game_loop());

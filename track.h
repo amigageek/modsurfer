@@ -14,7 +14,7 @@ typedef struct {
   UWORD unused2:1;
 } TrackStep;
 
-VOID track_init();
+Status track_init();
 Status track_build();
 VOID track_free();
 TrackStep* track_get_steps();

@@ -1,6 +1,7 @@
 #include "track.h"
 #include "build/tables.h"
 #include "module.h"
+#include "system.h"
 
 #include <proto/exec.h>
 #include <stdio.h> // FIXME
@@ -15,6 +16,7 @@ static struct {
   UWORD track_num_blocks;
   ULONG pat_select_samples[kNumPatternsMax];
   UBYTE period_to_color[kPeriodTableSize];
+  UWORD prng_seed;
 } g;
 
 // FIXME: test all effects
@@ -30,7 +32,9 @@ static struct {
 
 //#define DEBUG_PATTERN 10
 
-VOID track_init() {
+Status track_init() {
+  Status status = StatusOK;
+
   UWORD period_table[] = {
   // C    C#   D    D#   E    F    F#   G    G#   A    A#   B
     856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, // Octave 1
@@ -53,6 +57,11 @@ VOID track_init() {
 
     g.period_to_color[i] = next_color;
   }
+
+  ASSERT(system_random_seed(&g.prng_seed));
+
+cleanup:
+  return status;
 }
 
 static Status track_realloc() {
@@ -206,24 +215,22 @@ cleanup:
 static UWORD prng() {
   // LFSR PRNG (http://codebase64.org/doku.php?id=base:small_fast_16-bit_prng)
 #define kLFSRMagic 0xC2DF
-  static UWORD seed = 0;
-
-  if (seed == 0) {
-    seed ^= kLFSRMagic;
+  if (g.prng_seed == 0) {
+    g.prng_seed ^= kLFSRMagic;
   }
-  else if (seed == 0x8000) {
-    seed = 0;
+  else if (g.prng_seed == 0x8000) {
+    g.prng_seed = 0;
   }
   else {
-    UWORD carry = seed & 0x8000;
-    seed <<= 1;
+    UWORD carry = g.prng_seed & 0x8000;
+    g.prng_seed <<= 1;
 
     if (carry) {
-      seed ^= kLFSRMagic;
+      g.prng_seed ^= kLFSRMagic;
     }
   }
 
-  return seed;
+  return g.prng_seed;
 }
 
 static UWORD prng4() {
