@@ -90,10 +90,10 @@ vec2 tex_sphere_map(vec2 uv,
 
   if (*inside_ball) {
     float fov = M_PI / 4.0f;
-    vec3 cam = { 0.0f, 0.0f, -1.0f / sin(fov / 2.0f) };
+    vec3 cam = {0.0f, 0.0f, -1.0f / sin(fov / 2.0f)};
     float near_z = 1.0f;
     float near_w = tan(fov / 2) * near_z;
-    vec3 ray = { uv.v[0] * near_w, uv.v[1] * near_w, near_z };
+    vec3 ray = {uv.v[0] * near_w, uv.v[1] * near_w, near_z};
 
     float normalize = 0.0f;
 

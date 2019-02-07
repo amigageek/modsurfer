@@ -5,8 +5,6 @@
 #include "system.h"
 #include "track.h"
 
-#include <dos/dos.h>
-
 int main() {
   Status status = StatusOK;
 
@@ -22,5 +20,5 @@ cleanup:
   gfx_fini();
   system_fini();
 
-  return (status == StatusOK) ? RETURN_OK : RETURN_FAIL;
+  return 0;
 }

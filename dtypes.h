@@ -25,19 +25,19 @@ typedef struct {
   UWORD name_offset;
 } dirlist_entry_t;
 
-extern VOID dtypes_init();
+extern void dtypes_init();
 
-extern VOID vector_init(UWORD elem_size,
+extern void vector_init(UWORD elem_size,
                         vector_t* vec);
-extern VOID vector_free(vector_t* vec);
+extern void vector_free(vector_t* vec);
 extern ULONG vector_size(vector_t* vec);
 extern APTR vector_elems(vector_t* vec);
 extern Status vector_append(vector_t* vec,
                             ULONG num_elems,
                             APTR elems);
 
-extern VOID dirlist_init(dirlist_t* dl);
-extern VOID dirlist_free(dirlist_t* dl);
+extern void dirlist_init(dirlist_t* dl);
+extern void dirlist_free(dirlist_t* dl);
 extern UWORD dirlist_size(dirlist_t* dl);
 extern dirlist_entry_t* dirlist_entries(dirlist_t* dl);
 extern STRPTR dirlist_names(dirlist_t* dl);

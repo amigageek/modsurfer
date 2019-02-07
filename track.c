@@ -58,7 +58,10 @@ Status track_init() {
     g.period_to_color[i] = next_color;
   }
 
-  ASSERT(system_random_seed(&g.prng_seed));
+  ULONG time_micros = 0;
+  ASSERT(system_time_micros(&time_micros));
+
+  g.prng_seed = (UWORD)time_micros;
 
 cleanup:
   return status;
@@ -69,7 +72,7 @@ static Status track_realloc() {
 
   ULONG new_size = g.track_steps_size + kTrackDataAllocGranule;
   TrackStep* new_data;
-  CHECK(new_data = AllocMem(new_size, 0));
+  CHECK(new_data = AllocMem(new_size, 0), StatusOutOfMemory);
 
   if (g.track_steps) {
     CopyMemQuick(g.track_steps, new_data, g.track_steps_size);
@@ -87,12 +90,12 @@ static Status pad_visible(BOOL lead_in) {
   Status status = StatusOK;
 
   UWORD num_steps = lead_in ? kNumVisibleSteps : kNumPaddingSteps;
-  TrackStep step = { 0 };
+  TrackStep step = {0};
 
   for (UWORD i = 0; i < num_steps; ++ i) {
     // Reallocate track data if song length exceeds the last granule.
     if ((g.track_length & (kTrackDataLengthGranule - 1)) == 0) {
-      CHECK(track_realloc());
+      CATCH(track_realloc(), 0);
     }
 
     g.track_steps[g.track_length ++] = step;
@@ -125,8 +128,7 @@ static WORD fix_mult(WORD a,
   return a;
 }
 
-static Status analyze_samples() {
-  Status status = StatusOK;
+static void analyze_samples() {
   ModuleHeader* mod_hdr = &module_get_nonchip()->header;
   BYTE* samples = (BYTE*)module_get_samples();
 
@@ -202,14 +204,7 @@ static Status analyze_samples() {
     samp_dom_freq[samp_idx] = max_freq_idx;
 
     samples += samp_size_b;
-
-#if DEBUG_PATTERN
-    printf("sample %lu dom_freq %lu\n", (ULONG)(samp_idx + 1), (ULONG)max_freq_idx);
-#endif
   }
-
-cleanup:
-  return status;
 }
 
 static UWORD prng() {
@@ -256,12 +251,11 @@ static BOOL skip_command(PatternCommand* cmd) {
   return skip;
 }
 
-static Status select_samples() {
-  Status status = StatusOK;
+static void select_samples() {
   ModuleNonChip* nonchip = module_get_nonchip();
   UWORD num_patterns = module_get_num_patterns();
 
-  CHECK(analyze_samples());
+  analyze_samples();
 
   for (UWORD pat_idx = 0; pat_idx < num_patterns; ++ pat_idx) {
     // Count active samples in the pattern.
@@ -324,12 +318,6 @@ static Status select_samples() {
 
         UWORD score_pitch = ABS(pitch - kPitchTarget);
 
-#if DEBUG_PATTERN
-        if (pat_idx == DEBUG_PATTERN) {
-          printf("sample %lu pitch %ld count %lu\n", (ULONG)i, (LONG)pitch, (ULONG)sample_count[i]);
-        }
-#endif
-
         ULONG score = (score_count * kCountWeight) + (score_pitch * kPitchWeight);
 
         if (score < best_score) {
@@ -341,9 +329,6 @@ static Status select_samples() {
 
     g.pat_select_samples[pat_idx] = 1UL << best_score_idx;
   }
-
-cleanup:
-  return status;
 }
 
 typedef struct {
@@ -374,7 +359,7 @@ static Status walk_pattern(UWORD pat_idx,
 
     // Reallocate track data if song length exceeds the last granule.
     if ((g.track_length & (kTrackDataLengthGranule - 1)) == 0) {
-      CHECK(track_realloc());
+      CATCH(track_realloc(), 0);
     }
 
     UBYTE sample_in_step = 0;
@@ -387,7 +372,7 @@ static Status walk_pattern(UWORD pat_idx,
         continue;
       }
 
-      static UBYTE last_sample[4] = { 0, 0, 0, 0 };
+      static UBYTE last_sample[4] = {0, 0, 0, 0};
       UBYTE sample = (cmd->sample_hi << 4) | cmd->sample_lo;
 
       if (! sample) {
@@ -406,7 +391,7 @@ static Status walk_pattern(UWORD pat_idx,
     }
 
     TrackStep* step = &g.track_steps[g.track_length];
-    *step = (TrackStep){ 0 };
+    *step = (TrackStep){0};
 
     if (sample_in_step != 0) {
       step->sample = sample_in_step;
@@ -512,7 +497,7 @@ static Status walk_pattern(UWORD pat_idx,
       // FIXME: realloc with vector_append
       g.track_steps[g.track_length] = (TrackStep){0};
       ++ g.track_length;
-    }
+ }
   }
 
 cleanup:
@@ -531,7 +516,7 @@ static Status walk_song_table() {
   }
 
   // Walk through the pattern table, starting from the first entry.
-  BuildState state = { 0 };
+  BuildState state = {0};
 
   for (state.pat_tbl_idx = 0; state.pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
     UWORD pat_idx = nonchip->header.pat_tbl[state.pat_tbl_idx];
@@ -544,10 +529,10 @@ static Status walk_song_table() {
     pat_tbl_visited[state.pat_tbl_idx] = 1;
     ++ state.pat_tbl_idx;
 
-    Status pat_status = walk_pattern(pat_idx, &state);
-    CHECK(pat_status);
+    CATCH(walk_pattern(pat_idx, &state), StatusTrackEnd);
 
-    if (pat_status == StatusTrackEnd) {
+    if (status == StatusTrackEnd) {
+      status = StatusOK;
       break;
     }
   }
@@ -559,31 +544,31 @@ cleanup:
 Status track_build() {
   Status status = StatusOK;
 
-  CHECK(g.track_steps == NULL);
+  ASSERT(g.track_steps == NULL);
   g.track_length = 0;
   g.track_num_blocks = 0;
 
   // Select samples in each pattern corresponding to collectibles.
-  CHECK(select_samples());
+  select_samples();
 
   // Start with empty steps covering the visible track.
-  CHECK(pad_visible(TRUE));
+  CATCH(pad_visible(TRUE), 0);
 
   // Create steps for every division in the song, in playback order.
-  CHECK(walk_song_table());
+  CATCH(walk_song_table(), 0);
 
   // Finish with empty steps covering the visible track.
-  CHECK(pad_visible(FALSE));
+  CATCH(pad_visible(FALSE), 0);
 
 cleanup:
-  if (status == StatusError) {
+  if (status != StatusOK) {
     track_free();
   }
 
   return status;
 }
 
-VOID track_free() {
+void track_free() {
   if (g.track_steps) {
     FreeMem(g.track_steps, g.track_steps_size);
     g.track_steps = NULL;

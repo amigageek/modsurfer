@@ -54,24 +54,24 @@
 
 static Status refresh_file_list();
 static Status mouse_pressed(UWORD mouse_x, UWORD mouse_y);
-static VOID mouse_released(UWORD mouse_x, UWORD mouse_y);
-static VOID mouse_moved(UWORD mouse_x, UWORD mouse_y);
-static VOID check_mouse_pressed_file_list(UWORD mouse_x, UWORD mouse_y);
-static VOID check_mouse_pressed_slider(UWORD mouse_x, UWORD mouse_y);
+static void mouse_released(UWORD mouse_x, UWORD mouse_y);
+static void mouse_moved(UWORD mouse_x, UWORD mouse_y);
+static Status check_mouse_pressed_file_list(UWORD mouse_x, UWORD mouse_y);
+static void check_mouse_pressed_slider(UWORD mouse_x, UWORD mouse_y);
 static BOOL check_mouse_pressed_start_button(UWORD mouse_x, UWORD mouse_y);
-static VOID file_selected();
-static VOID slider_move(WORD unclamped_offset);
-static VOID slider_step(UWORD direction);
+static Status file_selected();
+static void slider_move(WORD unclamped_offset);
+static void slider_step(UWORD direction);
 static WORD file_list_entry_at(UWORD pos_x, UWORD pos_y);
-static VOID redraw_body();
-static VOID redraw_path();
-static VOID redraw_file_list(BOOL force_redraw);
-static VOID redraw_slider(BOOL force_redraw);
-static VOID redraw_mod_info();
-static VOID redraw_file_list_highlight(UWORD entry_idx, BOOL highlighted);
-static VOID draw_file_list_row(dirlist_entry_t* entries, STRPTR names, UWORD row);
-static VOID draw_frames();
-static VOID draw_footer_text();
+static void redraw_body();
+static void redraw_path();
+static void redraw_file_list(BOOL force_redraw);
+static void redraw_slider(BOOL force_redraw);
+static void redraw_mod_info();
+static void redraw_file_list_highlight(UWORD entry_idx, BOOL highlighted);
+static void draw_file_list_row(dirlist_entry_t* entries, STRPTR names, UWORD row);
+static void draw_frames();
+static void draw_footer_text();
 
 static struct {
   UBYTE dir_path[0x100];
@@ -95,21 +95,18 @@ Status menu_init() {
 
   string_copy(g.dir_path, "DH0:MODS/"); // FIXME
 
-  OwnBlitter();
+  ASSERT(system_acquire_blitter());
   gfx_draw_logo();
   gfx_init_score();
   ASSERT(refresh_file_list());
-  DisownBlitter();
 
 cleanup:
-  if (status == StatusError) {
-    menu_fini();
-  }
+  system_release_blitter();
 
   return status;
 }
 
-VOID menu_fini() {
+void menu_fini() {
   module_close();
 
   dirlist_free(&g.file_list);
@@ -118,7 +115,7 @@ VOID menu_fini() {
 Status menu_redraw() {
   Status status = StatusOK;
 
-  OwnBlitter();
+  ASSERT(system_acquire_blitter());
 
   gfx_clear_body();
   redraw_body();
@@ -126,7 +123,7 @@ Status menu_redraw() {
   draw_footer_text();
 
 cleanup:
-  DisownBlitter();
+  system_release_blitter();
 
   return status;
 }
@@ -154,7 +151,7 @@ Status menu_event_loop() {
     }
 
     for (struct IntuiMessage* msg; msg = (struct IntuiMessage*)GetMsg(window->UserPort); ) {
-      OwnBlitter();
+      ASSERT(system_acquire_blitter());
 
       switch (msg->Class) {
       case IDCMP_VANILLAKEY:
@@ -179,12 +176,12 @@ Status menu_event_loop() {
       case IDCMP_DISKREMOVED:
         // Avoid disk requester if path referenced removed disk.
         string_copy(g.dir_path, "");
-        refresh_file_list();
+        ASSERT(refresh_file_list());
         redraw_body();
         break;
       }
 
-      DisownBlitter();
+      ASSERT(system_release_blitter());
 
       ReplyMsg((struct Message*)msg);
     }
@@ -199,9 +196,12 @@ static Status refresh_file_list() {
 
   dirlist_free(&g.file_list);
 
-  DisownBlitter();
+  ASSERT(system_release_blitter());
+  CATCH(system_list_path(g.dir_path, &g.file_list), StatusInvalidPath);
 
-  if ((string_length(g.dir_path) == 0) || (! system_list_path(g.dir_path, &g.file_list))) {
+  if (status == StatusInvalidPath) {
+    status = StatusOK;
+
     // If path is empty or inaccessible show the drive list instead.
     string_copy(g.dir_path, "");
     ASSERT(system_list_drives(&g.file_list));
@@ -215,12 +215,8 @@ static Status refresh_file_list() {
 
   module_close();
 
-  OwnBlitter();
-
 cleanup:
-  if (status == StatusError) {
-    OwnBlitter();
-  }
+  system_acquire_blitter();
 
   return status;
 }
@@ -229,7 +225,7 @@ static Status mouse_pressed(UWORD mouse_x,
                             UWORD mouse_y) {
   Status status = StatusOK;
 
-  check_mouse_pressed_file_list(mouse_x, mouse_y);
+  ASSERT(check_mouse_pressed_file_list(mouse_x, mouse_y));
   check_mouse_pressed_slider(mouse_x, mouse_y);
 
   if (check_mouse_pressed_start_button(mouse_x, mouse_y)) {
@@ -240,7 +236,7 @@ cleanup:
   return status;
 }
 
-static VOID mouse_released(UWORD mouse_x,
+static void mouse_released(UWORD mouse_x,
                            UWORD mouse_y) {
   if (g.slider_drag_start_mouse_y != -1) {
     g.slider_drag_start_mouse_y = -1;
@@ -252,7 +248,7 @@ static VOID mouse_released(UWORD mouse_x,
   mouse_moved(mouse_x, mouse_y);
 }
 
-static VOID mouse_moved(UWORD mouse_x,
+static void mouse_moved(UWORD mouse_x,
                         UWORD mouse_y) {
   if (g.slider_drag_start_offset >= 0) {
     WORD mouse_rel_y = mouse_y - g.slider_drag_start_mouse_y;
@@ -283,8 +279,10 @@ static VOID mouse_moved(UWORD mouse_x,
   }
 }
 
-static VOID check_mouse_pressed_file_list(UWORD mouse_x,
-                                          UWORD mouse_y) {
+static Status check_mouse_pressed_file_list(UWORD mouse_x,
+                                            UWORD mouse_y) {
+  Status status = StatusOK;
+
   WORD fl_entry_mouse = file_list_entry_at(mouse_x, mouse_y);
 
   if ((fl_entry_mouse != -1) && (fl_entry_mouse != g.fl_entry_selected)) {
@@ -300,8 +298,8 @@ static VOID check_mouse_pressed_file_list(UWORD mouse_x,
       STRPTR names = dirlist_names(&g.file_list);
       STRPTR name = names + entry->name_offset;
 
-      system_append_path(g.dir_path, name);
-      refresh_file_list();
+      string_append_path(g.dir_path, name);
+      ASSERT(refresh_file_list());
       redraw_body();
 
       g.fl_entry_hover = -1;
@@ -311,12 +309,15 @@ static VOID check_mouse_pressed_file_list(UWORD mouse_x,
       g.fl_entry_selected = fl_entry_mouse;
       redraw_file_list_highlight(g.fl_entry_selected, TRUE);
 
-      file_selected();
+      ASSERT(file_selected());
     }
   }
+
+cleanup:
+  return status;
 }
 
-static VOID check_mouse_pressed_slider(UWORD mouse_x,
+static void check_mouse_pressed_slider(UWORD mouse_x,
                                        UWORD mouse_y) {
   if (mouse_x >= kSliderLeft && mouse_y >= kSliderTop) {
     if (mouse_y < (kSliderTop + g.slider_offset)) {
@@ -346,7 +347,9 @@ static BOOL check_mouse_pressed_start_button(UWORD mouse_x,
   return FALSE;
 }
 
-static VOID file_selected() {
+static Status file_selected() {
+  Status status = StatusOK;
+
   dirlist_entry_t* entries = dirlist_entries(&g.file_list);
   STRPTR names = dirlist_names(&g.file_list);
   dirlist_entry_t* entry = entries + g.fl_entry_selected;
@@ -355,19 +358,26 @@ static VOID file_selected() {
   module_close();
   module_open(g.dir_path, file_name);
 
-  DisownBlitter();
-  BOOL loaded = module_load_header();
-  OwnBlitter();
+  ASSERT(system_release_blitter());
+  CATCH(module_load_header(), StatusInvalidMod);
+  ASSERT(system_acquire_blitter());
 
-  if (! loaded) {
+  if (status == StatusInvalidMod) {
     module_close();
+    menu_redraw_button(NULL);
+    status = StatusOK;
+  }
+  else {
+    menu_redraw_button("START GAME");
   }
 
-  menu_redraw_button(loaded ? "START GAME" : NULL);
   redraw_mod_info();
+
+cleanup:
+  return status;
 }
 
-static VOID slider_move(WORD unclamped_offset) {
+static void slider_move(WORD unclamped_offset) {
   g.slider_offset = MAX(0, MIN(kSliderMaxHeight - g.slider_height, unclamped_offset));
 
   redraw_slider(FALSE);
@@ -381,7 +391,7 @@ static VOID slider_move(WORD unclamped_offset) {
   }
 }
 
-static VOID slider_step(UWORD direction) {
+static void slider_step(UWORD direction) {
   slider_move(g.slider_offset + (direction * g.slider_height));
 }
 
@@ -401,7 +411,7 @@ static WORD file_list_entry_at(UWORD pos_x,
   return entry;
 }
 
-static VOID redraw_body() {
+static void redraw_body() {
   redraw_path();
   redraw_file_list(TRUE);
   redraw_slider(TRUE);
@@ -409,7 +419,7 @@ static VOID redraw_body() {
   redraw_mod_info();
 }
 
-static VOID redraw_path() {
+static void redraw_path() {
   UBYTE* disp_planes = gfx_display_planes();
   UWORD clear_left = kFrameX1 + 1;
   UWORD clear_top = kFrameY0 + 1;
@@ -427,7 +437,7 @@ static VOID redraw_path() {
   gfx_draw_text(path_start, -1, kFileListLeft, kPathInfoTop, kDarkPen, TRUE);
 }
 
-static VOID redraw_file_list(BOOL force_redraw) {
+static void redraw_file_list(BOOL force_redraw) {
   static UWORD last_offset = -1;
 
   UWORD clear_top = 0;
@@ -497,7 +507,7 @@ static VOID redraw_file_list(BOOL force_redraw) {
   }
 }
 
-static VOID redraw_slider(BOOL force_redraw) {
+static void redraw_slider(BOOL force_redraw) {
   static UWORD last_offset = 0;
   static UWORD last_height = 0;
   static UWORD last_color = 0;
@@ -572,7 +582,7 @@ static VOID redraw_slider(BOOL force_redraw) {
   }
 }
 
-static VOID redraw_mod_info() {
+static void redraw_mod_info() {
   ModuleHeader* header = module_is_open() ? module_header() : NULL;
   gfx_draw_title(header ? header->title : (STRPTR)"SELECT A MOD");
 
@@ -597,7 +607,7 @@ static VOID redraw_mod_info() {
   }
 }
 
-VOID menu_redraw_button(STRPTR text) {
+void menu_redraw_button(STRPTR text) {
   UBYTE* planes = gfx_display_planes();
 
 #define kPlayButtonWidth (kFrameX1 - kFrameX0)
@@ -617,7 +627,7 @@ VOID menu_redraw_button(STRPTR text) {
   }
 }
 
-static VOID redraw_file_list_highlight(UWORD entry_idx,
+static void redraw_file_list_highlight(UWORD entry_idx,
                                        BOOL highlighted) {
   dirlist_entry_t* entries = dirlist_entries(&g.file_list);
   dirlist_entry_t* entry = entries + entry_idx;
@@ -637,27 +647,27 @@ static VOID redraw_file_list_highlight(UWORD entry_idx,
   }
 }
 
-static VOID draw_file_list_row(dirlist_entry_t* entries,
+static void draw_file_list_row(dirlist_entry_t* entries,
                                STRPTR names,
                                UWORD row) {
   dirlist_entry_t* entry = &entries[row + g.fl_entry_offset];
 
   STRPTR name = names + entry->name_offset;
   UWORD top = kTableTop + (kFramePad / 2) + (row * kTableRowHeight);
-  UWORD entry_colors[] = { kLightPen, kDarkPen, kTextModPen };
+  UWORD entry_colors[] = {kLightPen, kDarkPen, kTextModPen};
 
   gfx_draw_text(name, kFileListMaxChars, kFileListLeft, top, entry_colors[entry->type], TRUE);
 }
 
-static VOID draw_frames() {
+static void draw_frames() {
   static UWORD lines[][4] = {
-    { kFrameX1, kFrameY0, kFrameX3, kFrameY0 },
-    { kFrameX0, kFrameY1, kFrameX3, kFrameY1 },
-    { kFrameX0, kFrameY2, kFrameX3, kFrameY2 },
-    { kFrameX0, kFrameY1, kFrameX0, kFrameY2 },
-    { kFrameX1, kFrameY0, kFrameX1, kFrameY2 },
-    { kFrameX2, kFrameY1, kFrameX2, kFrameY2 },
-    { kFrameX3, kFrameY0, kFrameX3, kFrameY2 },
+    {kFrameX1, kFrameY0, kFrameX3, kFrameY0},
+    {kFrameX0, kFrameY1, kFrameX3, kFrameY1},
+    {kFrameX0, kFrameY2, kFrameX3, kFrameY2},
+    {kFrameX0, kFrameY1, kFrameX0, kFrameY2},
+    {kFrameX1, kFrameY0, kFrameX1, kFrameY2},
+    {kFrameX2, kFrameY1, kFrameX2, kFrameY2},
+    {kFrameX3, kFrameY0, kFrameX3, kFrameY2},
   };
 
   UBYTE* plane = gfx_display_planes();
@@ -669,7 +679,7 @@ static VOID draw_frames() {
   }
 }
 
-static VOID draw_footer_text() {
+static void draw_footer_text() {
   STRPTR text = "2018 EAB GAMEDEV COMPETITION ENTRY BY ARCANIST";
   UWORD left = (kDispWidth - (string_length(text) * kFontSpacing - 1)) / 2;
   UWORD top = kDispHeight - kFontHeight;

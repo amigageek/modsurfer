@@ -16,7 +16,7 @@ typedef struct {
 
 Status track_init();
 Status track_build();
-VOID track_free();
+void track_free();
 TrackStep* track_get_steps();
 ULONG track_get_length();
 UWORD track_get_num_blocks();

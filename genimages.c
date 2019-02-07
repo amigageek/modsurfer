@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK(x)                                \
+#define ASSERT(x)                                \
   if (! (x)) {                                  \
     fprintf(stderr, "assert(%s) failed\n", #x); \
     ret = false;                                \
@@ -58,20 +58,20 @@ bool load_ilbm(const char* path,
   // Read the IFF/ILBM glyph image into memory.
   long iff_size = 0;
 
-  CHECK(iff_file = fopen(path, "rb"));
-  CHECK(fseek(iff_file, 0, SEEK_END) == 0);
-  CHECK((iff_size = ftell(iff_file)) != -1);
-  CHECK(fseek(iff_file, 0, SEEK_SET) == 0);
+  ASSERT(iff_file = fopen(path, "rb"));
+  ASSERT(fseek(iff_file, 0, SEEK_END) == 0);
+  ASSERT((iff_size = ftell(iff_file)) != -1);
+  ASSERT(fseek(iff_file, 0, SEEK_SET) == 0);
 
-  CHECK(iff_data = malloc(iff_size));
-  CHECK(fread(iff_data, 1, iff_size, iff_file) == iff_size);
+  ASSERT(iff_data = malloc(iff_size));
+  ASSERT(fread(iff_data, 1, iff_size, iff_file) == iff_size);
 
   // Walk through each chunk in the IFF data.
   uint32_t bpls_stride_b = 0;
   uint32_t bpls_size_b = 0;
 
   for (uint32_t iff_offset = 0; iff_offset < iff_size; ) {
-    CHECK(iff_offset + 8 <= iff_size);
+    ASSERT(iff_offset + 8 <= iff_size);
 
     uint32_t chunk_id = BE32_TO_LE(*(uint32_t*)(iff_data + iff_offset));
     uint32_t chunk_size = BE32_TO_LE(*(uint32_t*)(iff_data + iff_offset + 4));
@@ -86,8 +86,8 @@ bool load_ilbm(const char* path,
       continue;
 
     case IFF_CHUNK_ID('B', 'M', 'H', 'D'): {
-      CHECK(iff_offset + chunk_size <= iff_size);
-      CHECK(chunk_size == sizeof(BitMapHeader));
+      ASSERT(iff_offset + chunk_size <= iff_size);
+      ASSERT(chunk_size == sizeof(BitMapHeader));
 
       bmh = (BitMapHeader*)(iff_data + iff_offset + 8);
       uint16_t width = BE16_TO_LE(bmh->bmh_Width);
@@ -106,13 +106,13 @@ bool load_ilbm(const char* path,
 
     case IFF_CHUNK_ID('B', 'O', 'D', 'Y'):
       // Decompress bitplane data if needed.
-      CHECK(iff_offset + chunk_size <= iff_size);
-      CHECK(bpls == NULL);
+      ASSERT(iff_offset + chunk_size <= iff_size);
+      ASSERT(bpls == NULL);
 
-      CHECK(bpls = (uint8_t*)malloc(bpls_size_b));
+      ASSERT(bpls = (uint8_t*)malloc(bpls_size_b));
 
       if (bmh->bmh_Compression == 0) {
-        CHECK(chunk_size == bpls_size_b);
+        ASSERT(chunk_size == bpls_size_b);
         memcpy(bpls, iff_data + iff_offset + 8, chunk_size);
       }
       else {
@@ -126,8 +126,8 @@ bool load_ilbm(const char* path,
           if (in_byte > 0x80) {
             // Repeat following byte into output.
             uint8_t rep_count = (uint8_t)(0x101 - in_byte);
-            CHECK(body_idx < chunk_size);
-            CHECK(bpls_idx + rep_count <= bpls_size_b);
+            ASSERT(body_idx < chunk_size);
+            ASSERT(bpls_idx + rep_count <= bpls_size_b);
 
             uint8_t rep_byte = body_data[body_idx ++];
 
@@ -138,8 +138,8 @@ bool load_ilbm(const char* path,
           else if (in_byte < 0x80) {
             // Copy following bytes into output.
             uint8_t lit_count = in_byte + 1;
-            CHECK(body_idx + lit_count <= chunk_size);
-            CHECK(bpls_idx + lit_count <= bpls_size_b);
+            ASSERT(body_idx + lit_count <= chunk_size);
+            ASSERT(bpls_idx + lit_count <= bpls_size_b);
 
             for (uint32_t lit_idx = 0; lit_idx < lit_count; ++ lit_idx) {
               bpls[bpls_idx ++] = body_data[body_idx ++];
@@ -150,7 +150,7 @@ bool load_ilbm(const char* path,
           }
         }
 
-        CHECK(bpls_idx == bpls_size_b);
+        ASSERT(bpls_idx == bpls_size_b);
       }
 
       break;
@@ -159,7 +159,7 @@ bool load_ilbm(const char* path,
     iff_offset += 8 + chunk_size + (chunk_size & 1);
   }
 
-  CHECK(bpls);
+  ASSERT(bpls);
   *out_bpls = bpls;
   *out_bpls_size_b = bpls_size_b;
 
@@ -186,7 +186,7 @@ static bool make_img_array(const char* img_name,
 
   char path[100];
   sprintf(path, "images/%s.iff", img_name);
-  CHECK(load_ilbm(path, &bpls, &bpls_size_b, &width, &height, &depth));
+  ASSERT(load_ilbm(path, &bpls, &bpls_size_b, &width, &height, &depth));
 
   printf("\nstatic UWORD %s%s_planes[] = {",
          in_chip ? "__chip " : "", img_name);
@@ -215,9 +215,9 @@ int main() {
 
   printf("#include <exec/types.h>\n");
 
-  CHECK(make_img_array("logo", true));
-  CHECK(make_img_array("font", true));
-  CHECK(make_img_array("pointer", true));
+  ASSERT(make_img_array("logo", true));
+  ASSERT(make_img_array("font", true));
+  ASSERT(make_img_array("pointer", true));
 
 cleanup:
   return ret ? 0 : 1;

@@ -9,40 +9,44 @@
 
 #include <proto/graphics.h>
 
-static VOID game_action_loop();
+static void game_action_loop();
 static UBYTE read_mousex();
 
 Status game_loop() {
   Status status = StatusOK;
-  BOOL last_success = TRUE;
 
   while (TRUE) {
-    if (last_success) {
+    if (status == StatusOK) {
       ASSERT(menu_redraw());
       gfx_fade_menu(TRUE);
     }
 
-    Status menu_status = menu_event_loop();
-    ASSERT(menu_status);
+    CATCH(menu_event_loop(), StatusPlay | StatusQuit);
 
-    if (menu_status == StatusQuit) {
+    if (status == StatusQuit) {
+      status = StatusOK;
       break;
     }
 
-    last_success = module_load_all() && track_build();
+    CATCH(module_load_all(), StatusInvalidMod | StatusOutOfMemory);
 
-    OwnBlitter();
+    if (status == StatusOK) {
+      CATCH(track_build(), StatusInvalidMod | StatusOutOfMemory);
+    }
 
-    if (last_success) {
+    ASSERT(system_acquire_blitter());
+
+    if (status == StatusOK) {
       gfx_fade_menu(FALSE);
       game_action_loop();
       track_free();
     }
     else {
-      menu_redraw_button("NOT ENOUGH MEMORY");
+      STRPTR msg = (status == StatusInvalidMod) ? "INVALID MOD FILE" : "NOT ENOUGH CHIP RAM";
+      menu_redraw_button(msg);
     }
 
-    DisownBlitter();
+    ASSERT(system_release_blitter());
   }
 
 cleanup:
@@ -52,9 +56,8 @@ cleanup:
 #define kVolumeMax 0x40
 #define kNumFadeFrames 0x20
 #define kNumTimeoutFrames 200
-#define kKeycodeEsc 0x45
 
-VOID game_action_loop() {
+void game_action_loop() {
   UWORD next_step_idx = 0;
   WORD player_x = 0;
   ULONG camera_z = 0;
@@ -84,9 +87,7 @@ VOID game_action_loop() {
   mt_Enable = 1;
 
   while (running || fade_frames) {
-    /* custom.color[0] = 0x000; */
     gfx_wait_vblank();
-    /* custom.color[0] = 0xF00; */
 
     while (ms_StepCount > 0) {
       TrackStep* play_step = &steps[next_step_idx + kNumStepsDelay];
@@ -166,7 +167,7 @@ VOID game_action_loop() {
       -- timeout_frames;
     }
 
-    if (running && (key_state[kKeycodeEsc] || (timeout_frames == 0))) {
+    if (running && (keyboard_state[kKeycodeEsc] || (timeout_frames == 0))) {
       running = FALSE;
       fade_frames = kNumFadeFrames;
     }

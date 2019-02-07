@@ -36,7 +36,7 @@
 #define kBallEdge 0x20
 #define kBallAngleLimit (((((kBallNumAngles * 2) + 1) << 11) / 2) - 1)
 
-extern VOID update_coplist(UWORD* colors __asm("a2"),
+extern void update_coplist(UWORD* colors __asm("a2"),
                            UWORD* cop_row __asm("a3"),
                            WORD* z_incs __asm("a4"),
                            TrackStep* step_near __asm("a6"),
@@ -47,18 +47,18 @@ extern VOID update_coplist(UWORD* colors __asm("a2"),
                            ULONG z __asm("d6"),
                            ULONG loop_counts __asm("d7"));
 
-static VOID make_bitmap();
+static void make_bitmap();
 static Status make_screen();
 static Status make_window();
 static Status make_copperlists();
 static UWORD* make_copperlist_score(UWORD* cl);
 static Status make_view();
-static VOID make_z_incs();
-static VOID get_display_window(struct ViewPort* viewport, UWORD* diwstrt, UWORD* diwstop, UWORD* diwhigh);
-static VOID update_sprite(UWORD* cop_list, UWORD player_x, UWORD camera_z_inc);
-static VOID update_sprite_colors(UWORD* cop_list,
+static void make_z_incs();
+static void get_display_window(struct ViewPort* viewport, UWORD* diwstrt, UWORD* diwstop, UWORD* diwhigh);
+static void update_sprite(UWORD* cop_list, UWORD player_x, UWORD camera_z_inc);
+static void update_sprite_colors(UWORD* cop_list,
                                  ULONG camera_z);
-static VOID update_score(UWORD* cop_list,
+static void update_score(UWORD* cop_list,
                          UWORD score_frac);
 static BOOL fade_common(UWORD* colors_lo,
                         UWORD* colors_hi,
@@ -101,7 +101,7 @@ cleanup:
   return status;
 }
 
-VOID gfx_fini() {
+void gfx_fini() {
   if (g.window) {
     CloseWindow(g.window);
     g.window = NULL;
@@ -129,7 +129,7 @@ struct View* gfx_view() {
   return &g.view;
 }
 
-VOID gfx_draw_text(STRPTR text,
+void gfx_draw_text(STRPTR text,
                    UWORD max_chars,
                    UWORD left,
                    UWORD top,
@@ -145,7 +145,7 @@ VOID gfx_draw_text(STRPTR text,
   }
 }
 
-VOID gfx_draw_logo() {
+void gfx_draw_logo() {
   // Two bitplane logo, shift colors [1,3] to [5,7].
   //
   // Display plane  Logo plane
@@ -168,7 +168,7 @@ VOID gfx_draw_logo() {
   }
 }
 
-VOID gfx_draw_title(STRPTR title) {
+void gfx_draw_title(STRPTR title) {
   UWORD title_length;
   for (title_length = 0; title_length < 20 && title[title_length]; ++ title_length) {}
 
@@ -192,18 +192,18 @@ VOID gfx_draw_title(STRPTR title) {
   gfx_draw_text(title, title_length, text_left, kHeaderTextTop, kHeaderTextPen, TRUE);
 }
 
-VOID gfx_init_score() {
+void gfx_init_score() {
   UWORD left = (kDispWidth + kHeaderTextGap) / 2;
   gfx_draw_text("  0.0%", -1, left, kHeaderTextTop, kHeaderTextPen, TRUE);
 }
 
 #define kFadeMenuNumColors 5
 
-VOID gfx_fade_menu(BOOL fade_in) {
-  static UWORD color_indices[kFadeMenuNumColors] = { 1, 2, 3, 4, 18 };
+void gfx_fade_menu(BOOL fade_in) {
+  static UWORD color_indices[kFadeMenuNumColors] = {1, 2, 3, 4, 18};
 
-  UWORD colors_lo[kFadeMenuNumColors] = { 0x000 };
-  UWORD colors_hi[kFadeMenuNumColors] = { 0x425, 0xB4C, 0xB8C, 0x5C5, 0xDB9 };
+  UWORD colors_lo[kFadeMenuNumColors] = {0x000};
+  UWORD colors_hi[kFadeMenuNumColors] = {0x425, 0xB4C, 0xB8C, 0x5C5, 0xDB9};
   UWORD* colors = fade_in ? colors_lo : colors_hi;
 
   for (BOOL fading = TRUE; fading; ) {
@@ -220,9 +220,9 @@ VOID gfx_fade_menu(BOOL fade_in) {
   }
 }
 
-VOID gfx_fade_action(BOOL fade_in,
+void gfx_fade_action(BOOL fade_in,
                      BOOL delay_fade) {
-  static UWORD colors_lo[kFadeActionNumColors] = { 0x000 };
+  static UWORD colors_lo[kFadeActionNumColors] = {0x000};
   static UWORD colors_hi[kFadeActionNumColors] = {
     0x810, 0x910, 0xA20, 0xB20, 0xB30, 0xC40, 0xD50, 0xD60, 0xD70, 0xE80, 0xE90, 0xFA0,
     0x300, 0x300, 0x310, 0x310, 0x310, 0x410, 0x420, 0x420, 0x420, 0x430, 0x430, 0x530,
@@ -281,7 +281,7 @@ static BOOL fade_common(UWORD* colors_lo,
   return fading;
 }
 
-VOID gfx_clear_body() {
+void gfx_clear_body() {
   for (UWORD i = 0; i < kDispDepth; ++ i) {
     blit_rect(&disp_planes[i][0][0], kDispStride, 0, kDrawTop,
               NULL, 0, 0, 0, kDispStride * kBitsPerByte, kDrawHeight, FALSE);
@@ -291,7 +291,7 @@ VOID gfx_clear_body() {
 #define kNumTrackLines (ARRAY_NELEMS(near_sx))
 #define kDrawCenterX ((kDispStride * kBitsPerByte) / 2)
 
-VOID gfx_draw_track() {
+void gfx_draw_track() {
   gfx_clear_body();
 
   WORD near_sx[] = {
@@ -328,7 +328,7 @@ VOID gfx_draw_track() {
   far_sx[kNumTrackLines - 2] = far_sx[4] - 1;
   far_sx[kNumTrackLines - 1] = far_sx[7] + 1;
 
-  UWORD colors[] = { 1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 3, 4, 4, 6, 6, 6, 6, };
+  UWORD colors[] = {1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 3, 4, 4, 6, 6, 6, 6};
 
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     UWORD* plane = &disp_planes[plane_idx][0][0];
@@ -344,7 +344,7 @@ VOID gfx_draw_track() {
   }
 }
 
-VOID gfx_update_display(TrackStep *step_near,
+void gfx_update_display(TrackStep *step_near,
                         WORD player_x,
                         ULONG camera_z,
                         UWORD camera_z_inc,
@@ -389,7 +389,7 @@ VOID gfx_update_display(TrackStep *step_near,
   custom.cop1lc = (ULONG)cop_list;
 }
 
-VOID gfx_wait_vblank() {
+void gfx_wait_vblank() {
   ULONG mask = (VPOSR_V8 << 0x10) | VHPOSR_VALL;
   ULONG compare = ((kDispWinY | 0x100) + 1) << 0x8;
   ULONG vpos_vhpos;
@@ -403,7 +403,7 @@ VOID gfx_wait_vblank() {
   } while ((vpos_vhpos & mask) < compare);
 }
 
-VOID gfx_wait_blit() {
+void gfx_wait_blit() {
   // Give blitter priority while we're waiting.
   // Also takes care of dummy DMACON access to work around Agnus bug.
   custom.dmacon = DMACON_SET | DMACON_BLITPRI;
@@ -411,7 +411,7 @@ VOID gfx_wait_blit() {
   custom.dmacon = DMACON_BLITPRI;
 }
 
-static VOID make_bitmap() {
+static void make_bitmap() {
   g.bitmap = (struct BitMap) {
     .BytesPerRow = kDispStride,
     .Rows = kDispHeight,
@@ -446,11 +446,11 @@ static Status make_screen() {
     .CustomBitMap = &g.bitmap,
   };
 
-  CHECK(g.screen = OpenScreen(&new_screen));
+  ASSERT(g.screen = OpenScreen(&new_screen));
 
   ShowTitle(g.screen, FALSE);
 
-  UWORD palette[1 << kDispDepth] = { 0, 0, 0, 0, 0, kHeaderPalette };
+  UWORD palette[1 << kDispDepth] = {0, 0, 0, 0, 0, kHeaderPalette};
   LoadRGB4(&g.screen->ViewPort, palette, ARRAY_NELEMS(palette));
   SetRGB4(&g.screen->ViewPort, 17, 0, 0, 0);
 
@@ -483,7 +483,7 @@ static Status make_window() {
     .Type = CUSTOMSCREEN,
   };
 
-  CHECK(g.window = OpenWindow(&new_window));
+  ASSERT(g.window = OpenWindow(&new_window));
 
   SetPointer(g.window, pointer_planes, kPtrSprEdge, kPtrSprEdge, kPtrSprOffX, kPtrSprOffY);
 
@@ -494,8 +494,8 @@ cleanup:
 static Status make_copperlists() {
   Status status = StatusOK;
 
-  UWORD diwstrt = (kDispWinY << DIWSTRT_V0_Shf) | kDispWinX;
-  UWORD diwstop = ((kDispWinY + kDispHeight - 0x100) << DIWSTOP_V0_Shf) | (kDispWinX + kDispWidth - 0x100);
+  UWORD diwstrt = (kDispWinY << DIWSTRT_V0_SHF) | kDispWinX;
+  UWORD diwstop = ((kDispWinY + kDispHeight - 0x100) << DIWSTOP_V0_SHF) | (kDispWinX + kDispWidth - 0x100);
   UWORD diwhigh = 0x2100;
 
   get_display_window(&g.screen->ViewPort, &diwstrt, &diwstop, &diwhigh);
@@ -503,67 +503,67 @@ static Status make_copperlists() {
   UWORD* cl = cop_lists[0];
 
   for (UWORD spr = 0; spr < 8; ++ spr) {
-    *(cl ++) = mCustomOffset(sprpt[spr]);
-    *(cl ++) = HI16(null_spr);
-    *(cl ++) = mCustomOffset(sprpt[spr]) + kBytesPerWord;
-    *(cl ++) = LO16(null_spr);
+    *(cl ++) = CUSTOM_OFFSET(sprpt[spr]);
+    *(cl ++) = WORD_HI(null_spr);
+    *(cl ++) = CUSTOM_OFFSET(sprpt[spr]) + kBytesPerWord;
+    *(cl ++) = WORD_LO(null_spr);
   }
 
-  UWORD hdr_pal[] = { kHeaderPalette };
+  UWORD hdr_pal[] = {kHeaderPalette};
 
   for (UWORD i = 0; i < ARRAY_NELEMS(hdr_pal); ++ i) {
-    *(cl ++) = mCustomOffset(color[i + 5]);
+    *(cl ++) = CUSTOM_OFFSET(color[i + 5]);
     *(cl ++) = hdr_pal[i];
   }
 
   g.cop_list_spr_idx = cl - cop_lists[0];
 
   for (UWORD i = 0; i < 16; ++ i) {
-    *(cl ++) = mCustomOffset(color[16 + i]);
+    *(cl ++) = CUSTOM_OFFSET(color[16 + i]);
     *(cl ++) = 0;
   }
 
-  *(cl ++) = mCustomOffset(diwstrt);
+  *(cl ++) = CUSTOM_OFFSET(diwstrt);
   *(cl ++) = diwstrt;
-  *(cl ++) = mCustomOffset(diwstop);
+  *(cl ++) = CUSTOM_OFFSET(diwstop);
   *(cl ++) = diwstop;
-  *(cl ++) = mCustomOffset(diwhigh);
+  *(cl ++) = CUSTOM_OFFSET(diwhigh);
   *(cl ++) = diwhigh;
 
-  *(cl ++) = mCustomOffset(ddfstrt);
+  *(cl ++) = CUSTOM_OFFSET(ddfstrt);
   *(cl ++) = kDispFetchStart;
-  *(cl ++) = mCustomOffset(ddfstop);
+  *(cl ++) = CUSTOM_OFFSET(ddfstop);
   *(cl ++) = kDispFetchStop;
 
   for (UWORD i = 0; i < kDispDepth; ++ i) {
     ULONG plane_start = (ULONG)&disp_planes[i][0][0] - kBytesPerWord;
 
-    *(cl ++) = mCustomOffset(bplpt[i]);
-    *(cl ++) = HI16(plane_start);
-    *(cl ++) = mCustomOffset(bplpt[i]) + kBytesPerWord;
-    *(cl ++) = LO16(plane_start);
+    *(cl ++) = CUSTOM_OFFSET(bplpt[i]);
+    *(cl ++) = WORD_HI(plane_start);
+    *(cl ++) = CUSTOM_OFFSET(bplpt[i]) + kBytesPerWord;
+    *(cl ++) = WORD_LO(plane_start);
   }
 
-  *(cl ++) = mCustomOffset(bpl1mod);
+  *(cl ++) = CUSTOM_OFFSET(bpl1mod);
   *(cl ++) = (kDispRowPadW * 2) - 2; // FIXME: macro
-  *(cl ++) = mCustomOffset(bpl2mod);
+  *(cl ++) = CUSTOM_OFFSET(bpl2mod);
   *(cl ++) = (kDispRowPadW * 2) - 2;
 
-  *(cl ++) = mCustomOffset(bplcon0);
+  *(cl ++) = CUSTOM_OFFSET(bplcon0);
   *(cl ++) = BPLCON0_COLOR;
-  *(cl ++) = mCustomOffset(bplcon1);
+  *(cl ++) = CUSTOM_OFFSET(bplcon1);
   *(cl ++) = 0;
 
   *(cl ++) = (kDispWinY << 8) | 0x1;
   *(cl ++) = 0xFFFE;
-  *(cl ++) = mCustomOffset(bplcon0);
-  *(cl ++) = BPLCON0_COLOR | (kDispDepth << BPLCON0_BPU_Shf);
+  *(cl ++) = CUSTOM_OFFSET(bplcon0);
+  *(cl ++) = BPLCON0_COLOR | (kDispDepth << BPLCON0_BPU_SHF);
 
   *(cl ++) = ((kDispWinY + kDispHdrHeight - 2) << 8) | 0x1;
   *(cl ++) = 0xFFFE;
 
   for (UWORD i = 1; i < 8; ++ i) {
-    *(cl ++) = mCustomOffset(color[i]);
+    *(cl ++) = CUSTOM_OFFSET(color[i]);
     *(cl ++) = 0;
   }
 
@@ -582,23 +582,23 @@ static Status make_copperlists() {
     *(cl ++) = (disp_y << 8) | 0x1;
     *(cl ++) = 0xFFFE;
 
-    *(cl ++) = mCustomOffset(bpl1mod);
+    *(cl ++) = CUSTOM_OFFSET(bpl1mod);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(bpl2mod);
+    *(cl ++) = CUSTOM_OFFSET(bpl2mod);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(bplcon1);
+    *(cl ++) = CUSTOM_OFFSET(bplcon1);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[1]);
+    *(cl ++) = CUSTOM_OFFSET(color[1]);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[2]);
+    *(cl ++) = CUSTOM_OFFSET(color[2]);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[3]);
+    *(cl ++) = CUSTOM_OFFSET(color[3]);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[4]);
+    *(cl ++) = CUSTOM_OFFSET(color[4]);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[5]);
+    *(cl ++) = CUSTOM_OFFSET(color[5]);
     *(cl ++) = 0;
-    *(cl ++) = mCustomOffset(color[6]);
+    *(cl ++) = CUSTOM_OFFSET(color[6]);
     *(cl ++) = 0;
   }
 
@@ -606,7 +606,7 @@ static Status make_copperlists() {
 
   *(cl ++) = ((kDispWinY + kDispHeight - 0x100) << 8) | 0x1;
   *(cl ++) = 0xFFFE;
-  *(cl ++) = mCustomOffset(bplcon0);
+  *(cl ++) = CUSTOM_OFFSET(bplcon0);
   *(cl ++) = BPLCON0_COLOR;
 
   g.cop_list_score_idx = cl - cop_lists[0];
@@ -648,36 +648,36 @@ static UWORD* make_copperlist_score(UWORD* cl) {
       if (kHeaderTextPen & (1 << plane_idx)) {
         *(cl ++) = 1;
         *(cl ++) = 0;
-        *(cl ++) = mCustomOffset(bltcon0);
-        *(cl ++) = (shift << BLTCON0_ASH0_Shf) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | 0xCA;
-        *(cl ++) = mCustomOffset(bltcon1);
-        *(cl ++) = shift << BLTCON1_BSH0_Shf;
-        *(cl ++) = mCustomOffset(bltbmod);
+        *(cl ++) = CUSTOM_OFFSET(bltcon0);
+        *(cl ++) = (shift << BLTCON0_ASH0_SHF) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | 0xCA;
+        *(cl ++) = CUSTOM_OFFSET(bltcon1);
+        *(cl ++) = shift << BLTCON1_BSH0_SHF;
+        *(cl ++) = CUSTOM_OFFSET(bltbmod);
         *(cl ++) = (kFontNGlyphs * kBytesPerWord) - (width_words << 1);
-        *(cl ++) = mCustomOffset(bltcmod);
+        *(cl ++) = CUSTOM_OFFSET(bltcmod);
         *(cl ++) = kDispStride - (width_words << 1);
-        *(cl ++) = mCustomOffset(bltdmod);
+        *(cl ++) = CUSTOM_OFFSET(bltdmod);
         *(cl ++) = kDispStride - (width_words << 1);
-        *(cl ++) = mCustomOffset(bltafwm);
+        *(cl ++) = CUSTOM_OFFSET(bltafwm);
         *(cl ++) = 0xF800;
-        *(cl ++) = mCustomOffset(bltalwm);
+        *(cl ++) = CUSTOM_OFFSET(bltalwm);
         *(cl ++) = right_word_mask;
-        *(cl ++) = mCustomOffset(bltadat);
+        *(cl ++) = CUSTOM_OFFSET(bltadat);
         *(cl ++) = 0xFFFF;
-        *(cl ++) = mCustomOffset(bltbpt);
-        *(cl ++) = HI16(src_start);
-        *(cl ++) = mCustomOffset(bltbpt) + kBytesPerWord;
-        *(cl ++) = LO16(src_start);
-        *(cl ++) = mCustomOffset(bltcpt);
-        *(cl ++) = HI16(dst_start);
-        *(cl ++) = mCustomOffset(bltcpt) + kBytesPerWord;
-        *(cl ++) = LO16(dst_start);
-        *(cl ++) = mCustomOffset(bltdpt);
-        *(cl ++) = HI16(dst_start);
-        *(cl ++) = mCustomOffset(bltdpt) + kBytesPerWord;
-        *(cl ++) = LO16(dst_start);
-        *(cl ++) = mCustomOffset(bltsize);
-        *(cl ++) = (kFontHeight << BLTSIZE_H0_Shf) | width_words;
+        *(cl ++) = CUSTOM_OFFSET(bltbpt);
+        *(cl ++) = WORD_HI(src_start);
+        *(cl ++) = CUSTOM_OFFSET(bltbpt) + kBytesPerWord;
+        *(cl ++) = WORD_LO(src_start);
+        *(cl ++) = CUSTOM_OFFSET(bltcpt);
+        *(cl ++) = WORD_HI(dst_start);
+        *(cl ++) = CUSTOM_OFFSET(bltcpt) + kBytesPerWord;
+        *(cl ++) = WORD_LO(dst_start);
+        *(cl ++) = CUSTOM_OFFSET(bltdpt);
+        *(cl ++) = WORD_HI(dst_start);
+        *(cl ++) = CUSTOM_OFFSET(bltdpt) + kBytesPerWord;
+        *(cl ++) = WORD_LO(dst_start);
+        *(cl ++) = CUSTOM_OFFSET(bltsize);
+        *(cl ++) = (kFontHeight << BLTSIZE_H0_SHF) | width_words;
       }
 
       dst_start += kDispSlice;
@@ -701,7 +701,7 @@ cleanup:
   return status;
 }
 
-static VOID make_z_incs() {
+static void make_z_incs() {
   UWORD prev_z = kNearZ;
 
   for (UWORD i = 0; i < kDrawHeight; ++ i) {
@@ -714,7 +714,7 @@ static VOID make_z_incs() {
   }
 }
 
-static VOID get_display_window(struct ViewPort* viewport,
+static void get_display_window(struct ViewPort* viewport,
                                UWORD* diwstrt,
                                UWORD* diwstop,
                                UWORD* diwhigh) {
@@ -728,15 +728,15 @@ static VOID get_display_window(struct ViewPort* viewport,
       UWORD data = cop_ins->u3.u4.u2.DestData;
 
       switch (addr) {
-      case mCustomOffset(diwstrt):
+      case CUSTOM_OFFSET(diwstrt):
         *diwstrt = data;
         break;
 
-      case mCustomOffset(diwstop):
+      case CUSTOM_OFFSET(diwstop):
         *diwstop = data;
         break;
 
-      case mCustomOffset(diwhigh):
+      case CUSTOM_OFFSET(diwhigh):
         *diwhigh = data;
         break;
       }
@@ -744,7 +744,7 @@ static VOID get_display_window(struct ViewPort* viewport,
   }
 }
 
-static VOID update_sprite(UWORD* cop_list,
+static void update_sprite(UWORD* cop_list,
                           UWORD player_x,
                           UWORD camera_z_inc) {
   // FIXME: y_frac naming (not fraction of draw height)
@@ -755,8 +755,8 @@ static VOID update_sprite(UWORD* cop_list,
   UWORD vstart = kDispWinY + y + (kBallEdge / 2);
   UWORD vstop = vstart + kBallEdge;
 
-  UWORD spr_ctl_0 = (vstart & 0xFF) << SPRxPOS_SV0_Shf;
-  UWORD spr_ctl_1 = ((vstop & 0xFF) << SPRxCTL_EV0_Shf) | ((vstart >> 8) << SPRxCTL_SV8_Shf) | ((vstop >> 8) << SPRxCTL_EV8_Shf);
+  UWORD spr_ctl_0 = (vstart & 0xFF) << SPRxPOS_SV0_SHF;
+  UWORD spr_ctl_1 = ((vstop & 0xFF) << SPRxCTL_EV0_SHF) | ((vstart >> 8) << SPRxCTL_SV8_SHF) | ((vstop >> 8) << SPRxCTL_EV8_SHF);
 
   static UWORD last_player_x = 0;
   WORD player_dx = player_x - last_player_x;
@@ -779,18 +779,18 @@ static VOID update_sprite(UWORD* cop_list,
     UWORD* spr = &ball_sprs[spr_frame][spr_idx][0][0];
     UWORD hstart = hstart_left + ((spr_idx & 2) ? 8 : -8);
 
-    spr[0] = spr_ctl_0 | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_Shf);
-    spr[1] = spr_ctl_1 | ((hstart & 0x1) << SPRxCTL_SH0_Shf) | ((spr_idx & 1) << SPRxCTL_ATT_Shf);
+    spr[0] = spr_ctl_0 | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_SHF);
+    spr[1] = spr_ctl_1 | ((hstart & 0x1) << SPRxCTL_SH0_SHF) | ((spr_idx & 1) << SPRxCTL_ATT_SHF);
 
-    cop_list[(spr_idx * 4) + 1] = HI16(spr);
-    cop_list[(spr_idx * 4) + 3] = LO16(spr);
+    cop_list[(spr_idx * 4) + 1] = WORD_HI(spr);
+    cop_list[(spr_idx * 4) + 3] = WORD_LO(spr);
   }
 }
 
 #define kColorCycleZShift 9
 #define kColorCycleNum 14
 
-static VOID update_sprite_colors(UWORD* cop_list,
+static void update_sprite_colors(UWORD* cop_list,
                                  ULONG camera_z) {
   static UWORD color_mask = 0x7F; // 7 off, 7 on
 
@@ -817,7 +817,7 @@ static VOID update_sprite_colors(UWORD* cop_list,
   color_mask &= (1 << kColorCycleNum) - 1;
 }
 
-static VOID update_score(UWORD* cop_list,
+static void update_score(UWORD* cop_list,
                          UWORD score_frac) {
   UWORD* cl = &cop_list[g.cop_list_score_idx] + 19;
 
@@ -833,8 +833,8 @@ static VOID update_score(UWORD* cop_list,
 
     for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
       if (kHeaderTextPen & (1 << plane_idx)) {
-        cl[0] = HI16(src_start);
-        cl[2] = LO16(src_start);
+        cl[0] = WORD_HI(src_start);
+        cl[2] = WORD_LO(src_start);
 
         cl += 32;
       }
@@ -842,6 +842,6 @@ static VOID update_score(UWORD* cop_list,
   }
 }
 
-VOID gfx_enable_copper_blits(BOOL enable) {
+void gfx_enable_copper_blits(BOOL enable) {
   custom.copcon = enable ? COPCON_CDANG : 0;
 }

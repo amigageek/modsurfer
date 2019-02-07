@@ -24,31 +24,31 @@
 #define kLaneWidth 123
 
 extern Status gfx_init();
-extern VOID gfx_fini();
+extern void gfx_fini();
 extern struct Window* gfx_window();
 extern UBYTE* gfx_display_planes();
 extern UBYTE* gfx_font_plane();
 extern struct View* gfx_view();
-extern VOID gfx_draw_text(STRPTR text,
+extern void gfx_draw_text(STRPTR text,
                           UWORD max_chars,
                           UWORD left,
                           UWORD top,
                           UWORD color,
                           BOOL replace_bg);
-extern VOID gfx_draw_logo();
-extern VOID gfx_draw_title(STRPTR title);
-extern VOID gfx_init_score();
-extern VOID gfx_fade_menu(BOOL fade_in);
-extern VOID gfx_fade_action(BOOL fade_in,
+extern void gfx_draw_logo();
+extern void gfx_draw_title(STRPTR title);
+extern void gfx_init_score();
+extern void gfx_fade_menu(BOOL fade_in);
+extern void gfx_fade_action(BOOL fade_in,
                             BOOL delay_fade);
-extern VOID gfx_clear_body();
-extern VOID gfx_draw_track();
-extern VOID gfx_update_display(TrackStep *step_near,
+extern void gfx_clear_body();
+extern void gfx_draw_track();
+extern void gfx_update_display(TrackStep *step_near,
                                WORD player_x,
                                ULONG camera_z,
                                UWORD camera_z_inc,
                                ULONG vu_meter_z,
                                UWORD score_frac);
-extern VOID gfx_wait_vblank();
-extern VOID gfx_wait_blit();
-extern VOID gfx_enable_copper_blits(BOOL enable);
+extern void gfx_wait_vblank();
+extern void gfx_wait_blit();
+extern void gfx_enable_copper_blits(BOOL enable);

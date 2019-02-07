@@ -19,13 +19,13 @@ static struct {
   ULONG samples_size;
 } g;
 
-VOID module_open(STRPTR dir_path,
+void module_open(STRPTR dir_path,
                  STRPTR file_name) {
   string_copy(g.file_path, dir_path);
   string_copy(g.file_path + string_length(g.file_path), file_name);
 }
 
-VOID module_close() {
+void module_close() {
   string_copy(g.file_path, "");
 
   if (g.samples) {
@@ -47,13 +47,13 @@ Status module_load_header() {
   Status status = StatusOK;
   BPTR file = 0;
 
-  CHECK(file = Open(g.file_path, MODE_OLDFILE));
+  CHECK(file = Open(g.file_path, MODE_OLDFILE), StatusInvalidMod);
 
   LONG file_size = 0;
   Seek(file, 0, OFFSET_END);
-  CHECK((file_size = Seek(file, 0, OFFSET_BEGINNING)) > 0);
+  CHECK((file_size = Seek(file, 0, OFFSET_BEGINNING)) > 0, StatusInvalidMod);
 
-  CHECK(read_header(file, file_size));
+  CATCH(read_header(file, file_size), 0);
 
 cleanup:
   if (file) {
@@ -67,18 +67,18 @@ Status module_load_all() {
   Status status = StatusOK;
   BPTR file = 0;
 
-  CHECK(file = Open(g.file_path, MODE_OLDFILE));
+  CHECK(file = Open(g.file_path, MODE_OLDFILE), StatusInvalidMod);
 
   LONG file_size = 0;
   Seek(file, 0, OFFSET_END);
-  CHECK((file_size = Seek(file, 0, OFFSET_BEGINNING)) > 0);
+  CHECK((file_size = Seek(file, 0, OFFSET_BEGINNING)) > 0, StatusInvalidMod);
 
   if (! g.nonchip) {
-    CHECK(read_nonchip(file, file_size));
+    CATCH(read_nonchip(file, file_size), 0);
   }
 
   if (! g.samples) {
-    CHECK(read_samples(file, file_size));
+    CATCH(read_samples(file, file_size), 0);
   }
 
 cleanup:
@@ -113,9 +113,9 @@ static Status read_header(BPTR file,
                           LONG file_size) {
   Status status = StatusOK;
 
-  CHECK(file_size >= sizeof(ModuleHeader));
+  CHECK(file_size >= sizeof(ModuleHeader), StatusInvalidMod);
   Seek(file, 0, OFFSET_BEGINNING);
-  CHECK(Read(file, &g.header, sizeof(ModuleHeader)) == sizeof(ModuleHeader));
+  CHECK(Read(file, &g.header, sizeof(ModuleHeader)) == sizeof(ModuleHeader), StatusInvalidMod);
 
   switch(g.header.tracker_id) {
   case mTrackerId('M', '.', 'K', '.'):
@@ -123,7 +123,7 @@ static Status read_header(BPTR file,
   case mTrackerId('F', 'L', 'T', '4'):
     break;
   default:
-    CHECK("Unsupported module format" && FALSE);
+    CHECK("Unsupported module format" && FALSE, StatusInvalidMod);
   }
 
 cleanup:
@@ -136,21 +136,21 @@ static Status read_nonchip(BPTR file,
 
   // Calculate the number of patterns.
   g.num_patterns = 1;
-  CHECK(g.header.pat_tbl_size <= 128);
+  CHECK(g.header.pat_tbl_size <= 128, StatusInvalidMod);
 
   for (UWORD i = 0; i < g.header.pat_tbl_size; ++ i) {
     g.num_patterns = MAX(g.num_patterns, 1 + g.header.pat_tbl[i]);
   }
 
-  CHECK(g.num_patterns <= kNumPatternsMax);
+  CHECK(g.num_patterns <= kNumPatternsMax, StatusInvalidMod);
 
   // Load the module header and pattern data into contiguous memory.
   g.nonchip_size = sizeof(ModuleHeader) + (g.num_patterns * sizeof(Pattern));
-  CHECK(g.nonchip = (ModuleNonChip*)AllocMem(g.nonchip_size, 0));
+  CHECK(g.nonchip = (ModuleNonChip*)AllocMem(g.nonchip_size, 0), StatusOutOfMemory);
 
-  CHECK(file_size >= g.nonchip_size);
+  CHECK(file_size >= g.nonchip_size, StatusInvalidMod);
   Seek(file, 0, OFFSET_BEGINNING);
-  CHECK(Read(file, g.nonchip, g.nonchip_size) == g.nonchip_size);
+  CHECK(Read(file, g.nonchip, g.nonchip_size) == g.nonchip_size, StatusInvalidMod);
 
 cleanup:
   return status;
@@ -168,15 +168,15 @@ static Status read_samples(BPTR file,
   }
 
   // Load sample data into chip memory.
-  CHECK(g.samples = AllocMem(g.samples_size, MEMF_CHIP));
+  CHECK(g.samples = AllocMem(g.samples_size, MEMF_CHIP), StatusOutOfMemory);
 
   ULONG read_size = file_size - g.nonchip_size;
   Seek(file, g.nonchip_size, OFFSET_BEGINNING);
-  CHECK(Read(file, g.samples, read_size) == read_size);
+  CHECK(Read(file, g.samples, read_size) == read_size, StatusInvalidMod);
 
   // File size may be slightly truncated in some mods.
   if (read_size < g.samples_size) {
-    mem_clear(g.samples + read_size, g.samples_size - read_size);
+    memory_clear(g.samples + read_size, g.samples_size - read_size);
   }
 
 cleanup:

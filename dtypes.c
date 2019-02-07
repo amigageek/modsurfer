@@ -5,7 +5,7 @@
 #define kVectorAllocGranule 0x400
 #define kVectorAllocMask ((ULONG)(kVectorAllocGranule - 1))
 
-VOID vector_init(UWORD elem_size,
+void vector_init(UWORD elem_size,
                  vector_t* vec) {
   vec->elem_size = elem_size;
   vec->num_elems = 0;
@@ -13,7 +13,7 @@ VOID vector_init(UWORD elem_size,
   vec->storage_size = 0;
 }
 
-VOID vector_free(vector_t* vec) {
+void vector_free(vector_t* vec) {
   if (vec->storage) {
     FreeMem(vec->storage, vec->storage_size);
     vec->storage = NULL;
@@ -38,7 +38,7 @@ Status vector_append(vector_t* vec,
   if (req_storage_size > vec->storage_size) {
     ULONG new_storage_size = (req_storage_size + kVectorAllocMask) & ~kVectorAllocMask;
     APTR new_storage = AllocMem(new_storage_size, 0);
-    CHECK(new_storage);
+    CHECK(new_storage, StatusOutOfMemory);
 
     if (vec->storage) {
       CopyMem(vec->storage, new_storage, vec->storage_size);
@@ -58,12 +58,12 @@ cleanup:
   return status;
 }
 
-VOID dirlist_init(dirlist_t* dl) {
+void dirlist_init(dirlist_t* dl) {
   vector_init(sizeof(dirlist_entry_t), &dl->entries);
   vector_init(1, &dl->names);
 }
 
-VOID dirlist_free(dirlist_t* dl) {
+void dirlist_free(dirlist_t* dl) {
   vector_free(&dl->names);
   vector_free(&dl->entries);
 }
@@ -134,7 +134,7 @@ static BOOL entry_order_before(dirlist_entry_t* entry1,
   return (name2[name_idx] ? TRUE : FALSE);
 }
 
-static VOID merge_entries(dirlist_entry_t* entries,
+static void merge_entries(dirlist_entry_t* entries,
                           dirlist_entry_t* tmp_entries,
                           STRPTR names,
                           UWORD left_start,
@@ -173,7 +173,7 @@ Status dirlist_sort(dirlist_t* dl) {
   // Make a temporary array for merge sort swaps.
   UWORD num_entries = dirlist_size(dl);
   ULONG entries_size = num_entries * sizeof(dirlist_entry_t);
-  CHECK(tmp_entries = (dirlist_entry_t*)AllocMem(entries_size, 0));
+  ASSERT(tmp_entries = (dirlist_entry_t*)AllocMem(entries_size, 0));
 
   dirlist_entry_t* entries = dirlist_entries(dl);
   STRPTR names = dirlist_names(dl);

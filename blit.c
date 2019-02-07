@@ -2,7 +2,7 @@
 #include "custom.h"
 #include "gfx.h"
 
-VOID blit_copy(APTR src_base,
+void blit_copy(APTR src_base,
                UWORD src_stride_b,
                UWORD src_x,
                UWORD src_y,
@@ -14,7 +14,7 @@ VOID blit_copy(APTR src_base,
                UWORD copy_h,
                BOOL replace_bg,
                BOOL force_desc) {
-  UWORD start_x[2] = { src_x, dst_x };
+  UWORD start_x[2] = {src_x, dst_x};
   UWORD start_x_word[2], end_x_word[2], num_words[2], word_offset[2];
 
   for (UWORD i = 0; i < 2; ++ i) {
@@ -59,8 +59,8 @@ VOID blit_copy(APTR src_base,
   // D = Destination data
   UWORD minterm = replace_bg ? 0xCA : 0xEA;
 
-  custom.bltcon0 = (ABS(shift) << BLTCON0_ASH0_Shf) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | minterm;
-  custom.bltcon1 = (ABS(shift) << BLTCON1_BSH0_Shf) | (desc ? BLTCON1_DESC : 0);
+  custom.bltcon0 = (ABS(shift) << BLTCON0_ASH0_SHF) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | minterm;
+  custom.bltcon1 = (ABS(shift) << BLTCON1_BSH0_SHF) | (desc ? BLTCON1_DESC : 0);
   custom.bltbmod = src_mod_b;
   custom.bltcmod = dst_mod_b;
   custom.bltdmod = dst_mod_b;
@@ -70,10 +70,10 @@ VOID blit_copy(APTR src_base,
   custom.bltbpt = (APTR)src_start_b;
   custom.bltcpt = (APTR)dst_start_b;
   custom.bltdpt = (APTR)dst_start_b;
-  custom.bltsize = (copy_h << BLTSIZE_H0_Shf) | width_words;
+  custom.bltsize = (copy_h << BLTSIZE_H0_SHF) | width_words;
 }
 
-VOID blit_rect(APTR dst_base,
+void blit_rect(APTR dst_base,
                UWORD dst_stride_b,
                UWORD dst_x,
                UWORD dst_y,
@@ -131,10 +131,10 @@ VOID blit_rect(APTR dst_base,
   custom.bltbpt = (APTR)mask_start_b;
   custom.bltcpt = (APTR)dst_start_b;
   custom.bltdpt = (APTR)dst_start_b;
-  custom.bltsize = (height << BLTSIZE_H0_Shf) | width_words;
+  custom.bltsize = (height << BLTSIZE_H0_SHF) | width_words;
 }
 
-VOID blit_line(APTR dst_base,
+void blit_line(APTR dst_base,
                UWORD dst_stride_b,
                UWORD x0,
                UWORD y0,
@@ -152,12 +152,12 @@ VOID blit_line(APTR dst_base,
 
   gfx_wait_blit();
 
-  custom.bltcon0 = ((x0 & 0xF) << BLTCON0_ASH0_Shf) | BLTCON0_USEA | BLTCON0_USEC | BLTCON0_USED | (0xCA << BLTCON0_LF0_Shf);
+  custom.bltcon0 = ((x0 & 0xF) << BLTCON0_ASH0_SHF) | BLTCON0_USEA | BLTCON0_USEC | BLTCON0_USED | (0xCA << BLTCON0_LF0_SHF);
   custom.bltcon1 =
-    ((x0 & 0xF) << BLTCON1_TEX0_Shf) |
-    ((((4 * dmin) - (2 * dmax)) < 0 ? 1 : 0) << BLTCON1_SIGN_Shf) |
-    (octant << BLTCON1_AUL_Shf) |
-    (0 << BLTCON1_SING_Shf) |
+    ((x0 & 0xF) << BLTCON1_TEX0_SHF) |
+    ((((4 * dmin) - (2 * dmax)) < 0 ? 1 : 0) << BLTCON1_SIGN_SHF) |
+    (octant << BLTCON1_AUL_SHF) |
+    (0 << BLTCON1_SING_SHF) |
     BLTCON1_LINE;
   custom.bltadat = 0x8000;
   custom.bltbdat = 0xFFFF;
@@ -170,10 +170,10 @@ VOID blit_line(APTR dst_base,
   custom.bltapt = (APTR)((4 * dmin) - (2 * dmax));
   custom.bltcpt = (APTR)dst_start;
   custom.bltdpt = (APTR)dst_start;
-  custom.bltsize = ((dmax + 1) << BLTSIZE_H0_Shf) | (0x2 << BLTSIZE_W0_Shf);
+  custom.bltsize = ((dmax + 1) << BLTSIZE_H0_SHF) | (0x2 << BLTSIZE_W0_SHF);
 }
 
-VOID blit_fill(APTR dst_base,
+void blit_fill(APTR dst_base,
                UWORD dst_stride_b,
                UWORD x,
                UWORD y,
@@ -213,10 +213,10 @@ VOID blit_fill(APTR dst_base,
   custom.bltalwm = left_word_mask;
   custom.bltapt = (APTR)dst_start_b;
   custom.bltdpt = (APTR)dst_start_b;
-  custom.bltsize = (height << BLTSIZE_H0_Shf) | width_words;
+  custom.bltsize = (height << BLTSIZE_H0_SHF) | width_words;
 }
 
-VOID blit_char(APTR font_base,
+void blit_char(APTR font_base,
                UWORD glyph_idx,
                APTR dst_row_base,
                UWORD dst_x,
@@ -237,8 +237,8 @@ VOID blit_char(APTR font_base,
     if (color & (1 << plane_idx)) {
       gfx_wait_blit();
 
-      custom.bltcon0 = (shift << BLTCON0_ASH0_Shf) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | minterm;
-      custom.bltcon1 = shift << BLTCON1_BSH0_Shf;
+      custom.bltcon0 = (shift << BLTCON0_ASH0_SHF) | BLTCON0_USEB | BLTCON0_USEC | BLTCON0_USED | minterm;
+      custom.bltcon1 = shift << BLTCON1_BSH0_SHF;
       custom.bltbmod = (kFontNGlyphs * kBytesPerWord) - (width_words << 1);
       custom.bltcmod = kDispStride - (width_words << 1);
       custom.bltdmod = kDispStride - (width_words << 1);
@@ -248,7 +248,7 @@ VOID blit_char(APTR font_base,
       custom.bltbpt = (APTR)src_start;
       custom.bltcpt = (APTR)dst_start;
       custom.bltdpt = (APTR)dst_start;
-      custom.bltsize = (kFontHeight << BLTSIZE_H0_Shf) | width_words;
+      custom.bltsize = (kFontHeight << BLTSIZE_H0_SHF) | width_words;
     }
 
     dst_start += kDispSlice;

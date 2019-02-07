@@ -18,7 +18,7 @@
 
 	macro	scanline_loop
 .prev_scanline_\@:
-	moveq	#0,d0
+	moveq	#$0,d0
 	move.w	(a4)+,d0	; z_inc = *(z_incs ++)
 	add.l	d0,d6		; z += z_inc
 	add.w	d0,d3		; step_frac += z_inc
@@ -61,7 +61,7 @@
 .no_stripe_\@:
 	move.w	d0,$12(a3)	; COLOR1 = stripe_color
 
-	moveq	#0,d0
+	moveq	#$0,d0
 	move.w	d0,$16(a3)	; COLOR2
 	move.w	d0,$1A(a3)	; COLOR3
 	move.w	d0,$1E(a3)	; COLOR4

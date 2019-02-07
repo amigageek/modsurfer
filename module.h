@@ -46,9 +46,9 @@ typedef struct {
   Pattern patterns[];
 } ModuleNonChip;
 
-extern VOID module_open(STRPTR dir_path,
+extern void module_open(STRPTR dir_path,
                         STRPTR file_name);
-extern VOID module_close();
+extern void module_close();
 extern BOOL module_is_open();
 extern Status module_load_header();
 extern Status module_load_all();
