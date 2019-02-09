@@ -293,28 +293,22 @@ void system_release_control() {
   allow_task_switch(TRUE);
 }
 
-Status system_acquire_blitter() {
-  Status status = StatusOK;
-
-  ASSERT(! g.blitter_owned);
-  g.blitter_owned = TRUE;
-
-  OwnBlitter();
-
-cleanup:
-  return status;
+void system_acquire_blitter() {
+  if (! g.blitter_owned) {
+    g.blitter_owned = TRUE;
+    OwnBlitter();
+  }
 }
 
-Status system_release_blitter() {
-  Status status = StatusOK;
+void system_release_blitter() {
+  if (g.blitter_owned) {
+    g.blitter_owned = FALSE;
+    DisownBlitter();
+  }
+}
 
-  ASSERT(g.blitter_owned);
-  g.blitter_owned = FALSE;
-
-  DisownBlitter();
-
- cleanup:
-  return status;
+void system_allow_copper_blits(BOOL allow) {
+  custom.copcon = allow ? COPCON_CDANG : 0;
 }
 
 static void allow_task_switch(BOOL allow) {

@@ -95,7 +95,7 @@ Status menu_init() {
 
   string_copy(g.dir_path, "DH0:MODS/"); // FIXME
 
-  ASSERT(system_acquire_blitter());
+  system_acquire_blitter();
   gfx_draw_logo();
   gfx_init_score();
   ASSERT(refresh_file_list());
@@ -107,7 +107,7 @@ cleanup:
 }
 
 void menu_fini() {
-  module_close();
+  module_close(); // FIXME
 
   dirlist_free(&g.file_list);
 }
@@ -115,7 +115,7 @@ void menu_fini() {
 Status menu_redraw() {
   Status status = StatusOK;
 
-  ASSERT(system_acquire_blitter());
+  system_acquire_blitter();
 
   gfx_clear_body();
   redraw_body();
@@ -151,7 +151,7 @@ Status menu_event_loop() {
     }
 
     for (struct IntuiMessage* msg; msg = (struct IntuiMessage*)GetMsg(window->UserPort); ) {
-      ASSERT(system_acquire_blitter());
+      system_acquire_blitter();
 
       switch (msg->Class) {
       case IDCMP_VANILLAKEY:
@@ -162,7 +162,7 @@ Status menu_event_loop() {
 
       case IDCMP_MOUSEBUTTONS:
         if (msg->Code == SELECTDOWN) {
-          status = mouse_pressed(msg->MouseX, msg->MouseY);
+          CATCH(mouse_pressed(msg->MouseX, msg->MouseY), StatusPlay);
         }
         else if (msg->Code == SELECTUP) {
           mouse_released(msg->MouseX, msg->MouseY);
@@ -181,10 +181,14 @@ Status menu_event_loop() {
         break;
       }
 
-      ASSERT(system_release_blitter());
+      system_release_blitter();
 
       ReplyMsg((struct Message*)msg);
     }
+  }
+
+  if (status == StatusPlay) {
+    status = StatusOK;
   }
 
 cleanup:
@@ -196,7 +200,7 @@ static Status refresh_file_list() {
 
   dirlist_free(&g.file_list);
 
-  ASSERT(system_release_blitter());
+  system_release_blitter();
   CATCH(system_list_path(g.dir_path, &g.file_list), StatusInvalidPath);
 
   if (status == StatusInvalidPath) {
@@ -358,9 +362,9 @@ static Status file_selected() {
   module_close();
   module_open(g.dir_path, file_name);
 
-  ASSERT(system_release_blitter());
+  system_release_blitter();
   CATCH(module_load_header(), StatusInvalidMod);
-  ASSERT(system_acquire_blitter());
+  system_acquire_blitter();
 
   if (status == StatusInvalidMod) {
     module_close();

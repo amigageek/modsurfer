@@ -2,4 +2,4 @@
 
 #include "common.h"
 
-extern Status game_loop();
+extern Status game_main_loop();  // StatusError

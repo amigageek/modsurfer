@@ -3,16 +3,10 @@
 #include "module.h"
 #include "system.h"
 
-#include <proto/exec.h>
-#include <stdio.h> // FIXME
-#include <stdlib.h> // FIXME
-
 #define kPeriodTableSize 857 // C-1 = 856
 
 static struct {
-  TrackStep* track_steps;
-  ULONG track_steps_size;
-  ULONG track_length;
+  vector_t track_steps;
   UWORD track_num_blocks;
   ULONG pat_select_samples[kNumPatternsMax];
   UBYTE period_to_color[kPeriodTableSize];
@@ -67,25 +61,6 @@ cleanup:
   return status;
 }
 
-static Status track_realloc() {
-  Status status = StatusOK;
-
-  ULONG new_size = g.track_steps_size + kTrackDataAllocGranule;
-  TrackStep* new_data;
-  CHECK(new_data = AllocMem(new_size, 0), StatusOutOfMemory);
-
-  if (g.track_steps) {
-    CopyMemQuick(g.track_steps, new_data, g.track_steps_size);
-    track_free();
-  }
-
-  g.track_steps = new_data;
-  g.track_steps_size = new_size;
-
-cleanup:
-  return status;
-}
-
 static Status pad_visible(BOOL lead_in) {
   Status status = StatusOK;
 
@@ -93,12 +68,7 @@ static Status pad_visible(BOOL lead_in) {
   TrackStep step = {0};
 
   for (UWORD i = 0; i < num_steps; ++ i) {
-    // Reallocate track data if song length exceeds the last granule.
-    if ((g.track_length & (kTrackDataLengthGranule - 1)) == 0) {
-      CATCH(track_realloc(), 0);
-    }
-
-    g.track_steps[g.track_length ++] = step;
+    CATCH(vector_append(&g.track_steps, 1, &step), 0);
   }
 
 cleanup:
@@ -357,11 +327,6 @@ static Status walk_pattern(UWORD pat_idx,
     PatternDivision* div = &pat->divisions[div_idx];
     UWORD next_div_idx = div_idx + 1;
 
-    // Reallocate track data if song length exceeds the last granule.
-    if ((g.track_length & (kTrackDataLengthGranule - 1)) == 0) {
-      CATCH(track_realloc(), 0);
-    }
-
     UBYTE sample_in_step = 0;
     UBYTE step_color = 0;
 
@@ -390,12 +355,11 @@ static Status walk_pattern(UWORD pat_idx,
       }
     }
 
-    TrackStep* step = &g.track_steps[g.track_length];
-    *step = (TrackStep){0};
+    TrackStep step = {0};
 
     if (sample_in_step != 0) {
-      step->sample = sample_in_step;
-      step->color = step_color;
+      step.sample = sample_in_step;
+      step.color = step_color;
 
       static UWORD next_lane_lut[4][4] = {
         // Row indexed by last active lane, column indexed by random number.
@@ -417,10 +381,10 @@ static Status walk_pattern(UWORD pat_idx,
         random4 = 0;
       }
 
-      step->active_lane = next_lane_lut[state->last_active_lane][random4];
+      step.active_lane = next_lane_lut[state->last_active_lane][random4];
 
-      if (step->active_lane != state->last_active_lane) {
-        state->last_active_lane = step->active_lane;
+      if (step.active_lane != state->last_active_lane) {
+        state->last_active_lane = step.active_lane;
         state->active_contiguous_count = 0;
       }
 
@@ -430,6 +394,8 @@ static Status walk_pattern(UWORD pat_idx,
     else {
       state->active_contiguous_count = 0;
     }
+
+    CATCH(vector_append(&g.track_steps, 1, &step), 0);
 
     // Handle commands which change the next division step.
     UBYTE delay = 0;
@@ -490,14 +456,13 @@ static Status walk_pattern(UWORD pat_idx,
       }
     }
 
-    ++ g.track_length;
     div_idx = next_div_idx;
 
+    TrackStep delay_step = {0};
+
     for (UWORD i = 0; i < delay; ++ i) {
-      // FIXME: realloc with vector_append
-      g.track_steps[g.track_length] = (TrackStep){0};
-      ++ g.track_length;
- }
+      CATCH(vector_append(&g.track_steps, 1, &delay_step), 0);
+    }
   }
 
 cleanup:
@@ -544,8 +509,9 @@ cleanup:
 Status track_build() {
   Status status = StatusOK;
 
-  ASSERT(g.track_steps == NULL);
-  g.track_length = 0;
+  ASSERT(vector_size(&g.track_steps) == 0);
+
+  vector_init(sizeof(TrackStep), &g.track_steps);
   g.track_num_blocks = 0;
 
   // Select samples in each pattern corresponding to collectibles.
@@ -569,21 +535,17 @@ cleanup:
 }
 
 void track_free() {
-  if (g.track_steps) {
-    FreeMem(g.track_steps, g.track_steps_size);
-    g.track_steps = NULL;
-    g.track_steps_size = 0;
-  }
+  vector_free(&g.track_steps);
 }
 
 TrackStep* track_get_steps() {
-  return g.track_steps;
+  return (TrackStep*)vector_elems(&g.track_steps);
 }
 
-ULONG track_get_length() {
-  return g.track_length;
+UWORD track_unpadded_length() {
+  return (UWORD)vector_size(&g.track_steps) - kNumPaddingSteps;
 }
 
-UWORD track_get_num_blocks() {
+UWORD track_num_blocks() {
   return g.track_num_blocks;
 }

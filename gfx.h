@@ -22,6 +22,7 @@
 #define kNearZ (kFarZ / kFarNearRatio)
 #define kBlockGapDepth ((kFarZ - kNearZ + 1) / kNumVisibleSteps)
 #define kLaneWidth 123
+#define kNumBlockColors 12
 
 extern Status gfx_init();
 extern void gfx_fini();
@@ -51,4 +52,3 @@ extern void gfx_update_display(TrackStep *step_near,
                                UWORD score_frac);
 extern void gfx_wait_vblank();
 extern void gfx_wait_blit();
-extern void gfx_enable_copper_blits(BOOL enable);

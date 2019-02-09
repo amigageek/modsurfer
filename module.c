@@ -3,7 +3,7 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 
-#define mTrackerId(a, b, c, d) (((a) << 0x18) | ((b) << 0x10) | ((c) << 0x8) | (d))
+#define TRACKER_ID(a, b, c, d) (((a) << 0x18) | ((b) << 0x10) | ((c) << 0x8) | (d))
 
 static Status read_header(BPTR file, LONG file_size);
 static Status read_nonchip(BPTR file, LONG file_size);
@@ -118,9 +118,9 @@ static Status read_header(BPTR file,
   CHECK(Read(file, &g.header, sizeof(ModuleHeader)) == sizeof(ModuleHeader), StatusInvalidMod);
 
   switch(g.header.tracker_id) {
-  case mTrackerId('M', '.', 'K', '.'):
-  case mTrackerId('M', '!', 'K', '!'):
-  case mTrackerId('F', 'L', 'T', '4'):
+  case TRACKER_ID('M', '.', 'K', '.'):
+  case TRACKER_ID('M', '!', 'K', '!'):
+  case TRACKER_ID('F', 'L', 'T', '4'):
     break;
   default:
     CHECK("Unsupported module format" && FALSE, StatusInvalidMod);

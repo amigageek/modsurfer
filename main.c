@@ -5,6 +5,8 @@
 #include "system.h"
 #include "track.h"
 
+#include <stdio.h>
+
 int main() {
   Status status = StatusOK;
 
@@ -13,7 +15,8 @@ int main() {
   ASSERT(track_init());
   ASSERT(gfx_init());
   ASSERT(menu_init());
-  ASSERT(game_loop());
+
+  ASSERT(game_main_loop());
 
 cleanup:
   menu_fini();

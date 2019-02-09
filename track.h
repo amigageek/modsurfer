@@ -14,9 +14,9 @@ typedef struct {
   UWORD unused2:1;
 } TrackStep;
 
-Status track_init();
-Status track_build();
+Status track_init();   // StatusError
+Status track_build();  // StatusError, StatusOutOfMemory
 void track_free();
 TrackStep* track_get_steps();
-ULONG track_get_length();
-UWORD track_get_num_blocks();
+UWORD track_unpadded_length();
+UWORD track_num_blocks();

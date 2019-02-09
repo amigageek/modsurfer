@@ -5,7 +5,7 @@
 #define kBitsPerByte 0x8
 #define kBitsPerWord 0x10
 #define kBytesPerWord 0x2
-#define kUWordMax 0xFFFFU
+#define kUWordMax 0xFFFF
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 #define MAX(X, Y) ((X) > (Y) ? (X) : (Y))

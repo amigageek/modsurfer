@@ -841,7 +841,3 @@ static void update_score(UWORD* cop_list,
     }
   }
 }
-
-void gfx_enable_copper_blits(BOOL enable) {
-  custom.copcon = enable ? COPCON_CDANG : 0;
-}
