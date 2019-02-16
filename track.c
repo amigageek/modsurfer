@@ -1,34 +1,71 @@
 #include "track.h"
 #include "build/tables.h"
+#include "dtypes.h"
 #include "module.h"
-#include "system.h"
 
 #define kPeriodTableSize 857 // C-1 = 856
+#define kFirstSampleNum 1  // Protracker uses samples 1-31
+#define kFFTImag 0
+#define kFFTReal 1
+#define kEffectPosJump 0xB
+#define kEffectSetVolume 0xC
+#define kEffectPatBreak 0xD
+#define kEffectExtend 0xE
+#define kEffectSetSpeed 0xF
+#define kEffectExtPatLoop 0x6
+#define kEffectExtPatDelay 0xE
+#define kCountTargetMin1 16
+#define kCountTargetMin2 4
+#define kCountTargetMin2Penalty 8
+#define kPitchTarget 3000
+#define kScoreCountWeight 0x100
+#define kScorePitchWeight 2
+
+typedef struct {
+  UWORD pat_tbl_idx;
+  UWORD div_idx;
+  UWORD div_start_idx;
+  UWORD loop_idx;
+  UWORD loop_count;
+  UWORD active_contiguous_count;
+  UWORD last_active_lane;
+} BuildState;
+
+static void select_samples();
+static void analyze_samples();
+static void real_to_fft_input(BYTE* samples,
+                              ULONG samp_size_b);
+static void apply_fft();
+static WORD fix_mult(WORD a,
+                     WORD b);
+static void find_dominant_freq(UWORD samp_idx);
+static void count_samples(UWORD pat_idx);
+static BOOL skip_command(PatternCommand* cmd);
+static void select_lead_sample(UWORD pat_idx);
+static Status pad_visible(BOOL lead_in);
+static Status walk_pattern_table();
+static Status walk_pattern(UWORD pat_idx,
+                           BuildState* state);
+static Status make_step(PatternDivision* div,
+                        BuildState* state,
+                        ULONG select_samples);
+static Status handle_commands(PatternDivision* div,
+                              BuildState* state);
 
 static struct {
   vector_t track_steps;
   UWORD track_num_blocks;
   ULONG pat_select_samples[kNumPatternsMax];
   UBYTE period_to_color[kPeriodTableSize];
-  UWORD prng_seed;
+  UWORD samp_dom_freq[kNumSamplesMax];
+  UBYTE samp_count[kNumSamplesMax];
+  ULONG samp_period_sum[kNumSamplesMax];
+  WORD fft_data[2][kFFTSize];
 } g;
 
-// FIXME: test all effects
-
-#define kTrackDataAllocGranule 0x1000
-#define kTrackDataLengthGranule (kTrackDataAllocGranule / sizeof(TrackStep))
-#define kEffectPosJump     0xB
-#define kEffectPatBreak    0xD
-#define kEffectExtend      0xE
-#define kEffectSetSpeed    0xF
-#define kEffectExtPatLoop  0x6
-#define kEffectExtPatDelay 0xE
-
-//#define DEBUG_PATTERN 10
-
-Status track_init() {
-  Status status = StatusOK;
-
+void track_init() {
+  // Protracker periods with 0 finetune.
+  // These are matched with notes in the module to color blocks by pitch.
   UWORD period_table[] = {
   // C    C#   D    D#   E    F    F#   G    G#   A    A#   B
     856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, // Octave 1
@@ -41,50 +78,131 @@ Status track_init() {
   UWORD next_period = period_table[period_idx];
   UWORD next_color = 0;
 
-  for (WORD i = kPeriodTableSize - 1; i >= 0; -- i) {
-    if (i == next_period) {
-      next_color = period_idx / 3;
+  // Loop over all periods in descending order (ascending pitch).
+  for (WORD period = kPeriodTableSize - 1; period >= 0; -- period) {
+    // Maintain the color until we reach the next Protracker note.
+    if (period == next_period) {
+      next_color = period_idx / ((ARRAY_NELEMS(period_table) - 1) / kNumBlockColors);
 
       ++ period_idx;
       next_period = period_table[period_idx];
     }
 
-    g.period_to_color[i] = next_color;
+    g.period_to_color[period] = next_color;
   }
-
-  ULONG time_micros = 0;
-  ASSERT(system_time_micros(&time_micros));
-
-  g.prng_seed = (UWORD)time_micros;
-
-cleanup:
-  return status;
 }
 
-static Status pad_visible(BOOL lead_in) {
+Status track_build() {
   Status status = StatusOK;
 
-  UWORD num_steps = lead_in ? kNumVisibleSteps : kNumPaddingSteps;
-  TrackStep step = {0};
+  ASSERT(vector_size(&g.track_steps) == 0);
+  vector_init(sizeof(TrackStep), &g.track_steps);
 
-  for (UWORD i = 0; i < num_steps; ++ i) {
-    CATCH(vector_append(&g.track_steps, 1, &step), 0);
+  g.track_num_blocks = 0;
+
+  // Choose samples in each pattern to correspond with blocks.
+  select_samples();
+
+  // Start with empty steps covering the visible track.
+  CATCH(pad_visible(TRUE), 0);
+
+  // Create steps for every division in the song, in playback order.
+  CATCH(walk_pattern_table(), 0);
+
+  // Finish with empty steps covering the visible track.
+  CATCH(pad_visible(FALSE), 0);
+
+ cleanup:
+  if (status != StatusOK) {
+    track_free();
   }
 
-cleanup:
   return status;
 }
 
-// FIXME: pitch variability?
+static void select_samples() {
+  analyze_samples();
 
-#define kFFTImag 0
-#define kFFTReal 1
-static WORD fft_data[2][kFFTSize];
+  UWORD num_patterns = module_num_patterns();
 
-static UWORD samp_dom_freq[kNumSamples];
+  for (UWORD pat_idx = 0; pat_idx < num_patterns; ++ pat_idx) {
+    count_samples(pat_idx);
+    select_lead_sample(pat_idx);
+  }
+}
+
+static void analyze_samples() {
+  ModuleHeader* mod_hdr = &module_nonchip()->header;
+  BYTE* next_sample = (BYTE*)module_samples();
+
+  for (UWORD samp_idx = 0; samp_idx < kNumSamplesMax; ++ samp_idx) {
+    ULONG samp_size_b = mod_hdr->sample_info[samp_idx].length_w * 2;
+
+    // Zero-sized samples are not used in the module.
+    if (samp_size_b == 0) {
+      g.samp_dom_freq[samp_idx] = 0;
+      continue;
+    }
+
+    real_to_fft_input(next_sample, samp_size_b);
+    apply_fft();
+    find_dominant_freq(samp_idx);
+
+    next_sample += samp_size_b;
+  }
+}
+
+static void real_to_fft_input(BYTE* samples,
+                              ULONG samp_size_b) {
+  // Real FFT to half-size complex FFT, decimation in time, bytes to words.
+  for (UWORD data_idx = 0; data_idx < kFFTSize; ++ data_idx) {
+    WORD value_real = 0;
+    WORD value_imag = 0;
+
+    UWORD reorder_idx = FFTReorder[data_idx];
+
+    if (reorder_idx < samp_size_b) {
+      value_real = (WORD)(samples[reorder_idx + 2]) << 8;
+      value_imag = (WORD)(samples[reorder_idx]) << 8;
+    }
+
+    g.fft_data[kFFTReal][data_idx] = value_real;
+    g.fft_data[kFFTImag][data_idx] = value_imag;
+  }
+}
+
+static void apply_fft() {
+  // Based on fix_fft: https://gist.github.com/Tomwi/3842231
+  UWORD k = kFFTSizeLog2 - 1;
+
+  for (UWORD level = 1; level < kFFTSize; level *= 2) {
+    for (UWORD m = 0; m < level; ++ m) {
+      UWORD j = m << k;
+      WORD wr = FFTSinLUT[j + (kFFTSize / 4)] >> 1;
+      WORD wi = -FFTSinLUT[j] >> 1;
+
+      for (UWORD i = m; i < kFFTSize; i += (level * 2)) {
+        j = i + level;
+
+        WORD tr = fix_mult(wr, g.fft_data[kFFTReal][j]) - fix_mult(wi, g.fft_data[kFFTImag][j]);
+        WORD ti = fix_mult(wr, g.fft_data[kFFTImag][j]) + fix_mult(wi, g.fft_data[kFFTReal][j]);
+        WORD qr = g.fft_data[kFFTReal][i] >> 1;
+        WORD qi = g.fft_data[kFFTImag][i] >> 1;
+
+        g.fft_data[kFFTReal][j] = qr - tr;
+        g.fft_data[kFFTImag][j] = qi - ti;
+        g.fft_data[kFFTReal][i] = qr + tr;
+        g.fft_data[kFFTImag][i] = qi + ti;
+      }
+    }
+
+    -- k;
+  }
+}
 
 static WORD fix_mult(WORD a,
                      WORD b) {
+  // Fixed-point multiplication with normalization for FFT.
   asm (
     "muls.w  %1,%0;"        // c = a*b
     "swap    %0;"           // c = a*b[15:0, 31:16]
@@ -98,380 +216,125 @@ static WORD fix_mult(WORD a,
   return a;
 }
 
-static void analyze_samples() {
-  ModuleHeader* mod_hdr = &module_get_nonchip()->header;
-  BYTE* samples = (BYTE*)module_get_samples();
+static void find_dominant_freq(UWORD samp_idx) {
+  LONG max_ampl_sqr = 0;
+  UWORD dom_freq_idx = 0;
 
-  for (UWORD samp_idx = 0; samp_idx < kNumSamples; ++ samp_idx) {
-    UWORD samp_size_b = mod_hdr->sample_info[samp_idx].length_w * 2;
+  for (UWORD i = 1; i < kFFTSize / 2; ++ i) {
+    LONG ampl_sqr =
+      ((g.fft_data[kFFTReal][i] * g.fft_data[kFFTReal][i]) >> 1) +
+      ((g.fft_data[kFFTImag][i] * g.fft_data[kFFTImag][i]) >> 1);
 
-    if (samp_size_b == 0) {
-      samp_dom_freq[samp_idx] = 0;
-      continue;
+    if (ampl_sqr > max_ampl_sqr) {
+      max_ampl_sqr = ampl_sqr;
+      dom_freq_idx = i;
     }
-
-    // Center FFT window on sample data to avoid attack/decay.
-    if (samp_size_b > kFFTSize) {
-      // FIXME
-    }
-
-    // Real FFT to half-size complex FFT, decimation in time, bytes to words.
-    for (UWORD data_idx = 0; data_idx < kFFTSize; ++ data_idx) {
-      WORD value_real = 0;
-      WORD value_imag = 0;
-
-      UWORD reorder_idx = FFTReorder[data_idx];
-
-      if (reorder_idx < samp_size_b) {
-        value_real = (WORD)(samples[reorder_idx + 2]) << 8;
-        value_imag = (WORD)(samples[reorder_idx]) << 8;
-      }
-
-      fft_data[kFFTReal][data_idx] = value_real;
-      fft_data[kFFTImag][data_idx] = value_imag;
-    }
-
-    UWORD k = kFFTSizeLog2 - 1;
-
-    for (UWORD level = 1; level < kFFTSize; level *= 2) {
-      for (UWORD m = 0; m < level; ++ m) {
-        UWORD j = m << k;
-        WORD wr = FFTSinLUT[j + (kFFTSize / 4)] >> 1;
-        WORD wi = -FFTSinLUT[j] >> 1;
-
-        for (UWORD i = m; i < kFFTSize; i += (level * 2)) {
-          j = i + level;
-
-          WORD tr = fix_mult(wr, fft_data[kFFTReal][j]) - fix_mult(wi, fft_data[kFFTImag][j]);
-          WORD ti = fix_mult(wr, fft_data[kFFTImag][j]) + fix_mult(wi, fft_data[kFFTReal][j]);
-          WORD qr = fft_data[kFFTReal][i] >> 1;
-          WORD qi = fft_data[kFFTImag][i] >> 1;
-
-          fft_data[kFFTReal][j] = qr - tr;
-          fft_data[kFFTImag][j] = qi - ti;
-          fft_data[kFFTReal][i] = qr + tr;
-          fft_data[kFFTImag][i] = qi + ti;
-        }
-      }
-
-      -- k;
-    }
-
-    LONG max_ampl_sqr = 0;
-    UWORD max_freq_idx = 0;
-
-    for (UWORD i = 1; i < kFFTSize / 2; ++ i) {
-      LONG ampl_sqr =
-        ((fft_data[kFFTReal][i] * fft_data[kFFTReal][i]) >> 1) +
-        ((fft_data[kFFTImag][i] * fft_data[kFFTImag][i]) >> 1);
-
-      if (ampl_sqr > max_ampl_sqr) {
-        max_ampl_sqr = ampl_sqr;
-        max_freq_idx = i;
-      }
-    }
-
-    samp_dom_freq[samp_idx] = max_freq_idx;
-
-    samples += samp_size_b;
   }
+
+  g.samp_dom_freq[samp_idx] = dom_freq_idx;
 }
 
-static UWORD prng() {
-  // LFSR PRNG (http://codebase64.org/doku.php?id=base:small_fast_16-bit_prng)
-#define kLFSRMagic 0xC2DF
-  if (g.prng_seed == 0) {
-    g.prng_seed ^= kLFSRMagic;
-  }
-  else if (g.prng_seed == 0x8000) {
-    g.prng_seed = 0;
-  }
-  else {
-    UWORD carry = g.prng_seed & 0x8000;
-    g.prng_seed <<= 1;
+static void count_samples(UWORD pat_idx) {
+  ModuleNonChip* nonchip = module_nonchip();
+  Pattern* pat = &nonchip->patterns[pat_idx];
 
-    if (carry) {
-      g.prng_seed ^= kLFSRMagic;
+  for (UWORD i = 0; i < kNumSamplesMax; ++ i) {
+    g.samp_count[i] = 0;
+    g.samp_period_sum[i] = 0;
+  }
+
+  for (UWORD div_idx = 0; div_idx < kDivsPerPattern; ++ div_idx) {
+    PatternDivision* div = &pat->divisions[div_idx];
+
+    for (UWORD cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
+      PatternCommand* cmd = &div->commands[cmd_idx];
+
+      if (skip_command(cmd)) {
+        continue;
+      }
+
+      // Some MODs place commands after a pattern break, exit early.
+      UWORD effect_major = cmd->effect >> 8;
+
+      if (effect_major == kEffectPatBreak) {
+        div_idx = kDivsPerPattern;
+        break;
+      }
+
+      UBYTE samp_num = (cmd->sample_hi << 4) | cmd->sample_lo;
+      UWORD period = cmd->parameter;
+
+      if (samp_num && period) {
+        UWORD samp_idx = samp_num - kFirstSampleNum;
+
+        ++ g.samp_count[samp_idx];
+        g.samp_period_sum[samp_idx] += period;
+      }
     }
   }
-
-  return g.prng_seed;
-}
-
-static UWORD prng4() {
-  static UWORD last_random = 0;
-
-  if (last_random == 0) {
-    last_random = prng();
-  }
-
-  UWORD random4 = last_random & 3;
-  last_random >>= 2;
-
-  return random4;
 }
 
 static BOOL skip_command(PatternCommand* cmd) {
   BOOL skip = FALSE;
 
-  if (((cmd->effect >> 8) == 0xC) && ((cmd->effect & 0xFF) < 32)) {
+  // Skip over samples played at half volume or less.
+  if (((cmd->effect >> 8) == kEffectSetVolume) && ((cmd->effect & 0xFF) < 0x20)) {
     skip = TRUE;
   }
 
   return skip;
 }
 
-static void select_samples() {
-  ModuleNonChip* nonchip = module_get_nonchip();
-  UWORD num_patterns = module_get_num_patterns();
+static void select_lead_sample(UWORD pat_idx) {
+  UWORD best_samp_idx = 0;
+  ULONG best_score = (ULONG)-1;
 
-  analyze_samples();
+  for (UWORD samp_idx = 0; samp_idx < kNumSamplesMax; ++ samp_idx) {
+    if (g.samp_count[samp_idx] > 0) {
+      // Combine FFT-derived frequency with average resample rate.
+      // Resulting pitch is in non-standard units but linearly correlated.
+      UWORD avg_period = g.samp_period_sum[samp_idx] / g.samp_count[samp_idx];
+      UWORD pitch = ((UWORD)(0x10000 / avg_period) * g.samp_dom_freq[samp_idx]) / 5;
 
-  for (UWORD pat_idx = 0; pat_idx < num_patterns; ++ pat_idx) {
-    // Count active samples in the pattern.
-    static UBYTE sample_count[0x20];
-    static ULONG sample_periods[0x20];
+      // Penalize samples with counts below the first minimum threshold.
+      UWORD score_count = MAX(kCountTargetMin1 - g.samp_count[samp_idx], 0);
 
-    for (UWORD i = 0; i < 0x20; ++ i) {
-      sample_count[i] = 0;
-      sample_periods[i] = 0;
-    }
+      // Penalize heavily below the second minimum sample count threshold.
+      if (g.samp_count[samp_idx] < kCountTargetMin2) {
+        score_count *= kCountTargetMin2Penalty;
+      }
 
-    Pattern* pat = &nonchip->patterns[pat_idx];
+      // Weight pitch and count scores to form lead instrument score.
+      UWORD score_pitch = ABS(pitch - kPitchTarget);
+      ULONG score = (score_count * kScoreCountWeight) + (score_pitch * kScorePitchWeight);
 
-    for (UWORD div_idx = 0; div_idx < kDivsPerPat; ++ div_idx) {
-      PatternDivision* div = &pat->divisions[div_idx];
-
-      for (UWORD cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
-        PatternCommand* cmd = &div->commands[cmd_idx];
-
-        UWORD effect_major = cmd->effect >> 8;
-
-        if (effect_major == kEffectPatBreak) {
-          div_idx = kDivsPerPat;
-          break;
-        }
-
-        if (skip_command(cmd)) {
-          continue;
-        }
-
-        UBYTE sample = (cmd->sample_hi << 4) | cmd->sample_lo;
-        UWORD period = cmd->parameter;
-
-        if (sample && period) {
-          ++ sample_count[sample];
-          sample_periods[sample] += period;
-        }
+      if (score < best_score) {
+        best_score = score;
+        best_samp_idx = samp_idx;
       }
     }
-
-// FIXME: Instead of pitch target, sort and choose percentile?
-#define kCountTargetMin 16
-#define kPitchTarget 3000
-#define kCountWeight 1
-#define kPitchWeight 2
-
-    UWORD best_score_idx = 0;
-    ULONG best_score = (ULONG)-1;
-
-    for (UWORD i = 1; i < 31; ++ i) {
-      if (sample_count[i] > 0) {
-        UWORD avg_period = sample_periods[i] / sample_count[i];
-        UWORD pitch = ((UWORD)(0x10000 / avg_period) * samp_dom_freq[i - 1]) / 5;
-
-        UWORD score_count = MAX(kCountTargetMin - sample_count[i], 0) << 8;
-
-        if (score_count > 0xC00) {
-          score_count *= 8;
-        }
-
-        UWORD score_pitch = ABS(pitch - kPitchTarget);
-
-        ULONG score = (score_count * kCountWeight) + (score_pitch * kPitchWeight);
-
-        if (score < best_score) {
-          best_score = score;
-          best_score_idx = i;
-        }
-      }
-    }
-
-    g.pat_select_samples[pat_idx] = 1UL << best_score_idx;
   }
+
+  g.pat_select_samples[pat_idx] = 1UL << (best_samp_idx + kFirstSampleNum);
 }
 
-typedef struct {
-  UWORD pat_tbl_idx;
-  UWORD div_start_idx;
-  UWORD active_contiguous_count;
-  UWORD last_active_lane;
-} BuildState;
-
-static Status walk_pattern(UWORD pat_idx,
-                           BuildState* state) {
+static Status pad_visible(BOOL lead_in) {
   Status status = StatusOK;
-  ModuleNonChip* nonchip = module_get_nonchip();
 
-  // Walk through the pattern, starting from the first division.
-  Pattern* pat = &nonchip->patterns[pat_idx];
-  ULONG select_samples = g.pat_select_samples[pat_idx];
+  UWORD num_steps = lead_in ? kNumVisibleSteps : kNumPaddingSteps;
+  TrackStep step = {0};
 
-  UWORD div_idx = state->div_start_idx;
-  state->div_start_idx = 0;
-
-  UWORD loop_idx = 0;
-  UWORD loop_count = -1;
-
-  while (div_idx < kDivsPerPat) {
-    PatternDivision* div = &pat->divisions[div_idx];
-    UWORD next_div_idx = div_idx + 1;
-
-    UBYTE sample_in_step = 0;
-    UBYTE step_color = 0;
-
-    for (UWORD cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
-      PatternCommand* cmd = (PatternCommand*)&div->commands[cmd_idx];
-
-      if (skip_command(cmd)) {
-        continue;
-      }
-
-      static UBYTE last_sample[4] = {0, 0, 0, 0};
-      UBYTE sample = (cmd->sample_hi << 4) | cmd->sample_lo;
-
-      if (! sample) {
-        sample = last_sample[cmd_idx];
-      }
-      else {
-        last_sample[cmd_idx] = sample;
-      }
-
-      UWORD period = cmd->parameter;
-
-      if (period && sample && (select_samples & (1UL << sample))) {
-        sample_in_step = sample;
-        step_color = g.period_to_color[period];
-      }
-    }
-
-    TrackStep step = {0};
-
-    if (sample_in_step != 0) {
-      step.sample = sample_in_step;
-      step.color = step_color;
-
-      static UWORD next_lane_lut[4][4] = {
-        // Row indexed by last active lane, column indexed by random number.
-        2, 1, 2, 3,
-        1, 2, 2, 3,
-        2, 1, 2, 3,
-        3, 2, 2, 1,
-      };
-
-      UWORD random4 = prng4();
-
-      if (state->active_contiguous_count == 1) {
-        // Avoid lane change in contiguous segments until length is >= 2.
-        random4 = 0;
-      }
-
-      if (state->active_contiguous_count && (state->last_active_lane != 2) && (random4 == 3)) {
-        // Avoid left-right and right-left lane changes in contiguous segments.
-        random4 = 0;
-      }
-
-      step.active_lane = next_lane_lut[state->last_active_lane][random4];
-
-      if (step.active_lane != state->last_active_lane) {
-        state->last_active_lane = step.active_lane;
-        state->active_contiguous_count = 0;
-      }
-
-      ++ state->active_contiguous_count;
-      ++ g.track_num_blocks;
-    }
-    else {
-      state->active_contiguous_count = 0;
-    }
-
+  for (UWORD i = 0; i < num_steps; ++ i) {
     CATCH(vector_append(&g.track_steps, 1, &step), 0);
-
-    // Handle commands which change the next division step.
-    UBYTE delay = 0;
-
-    for (ULONG cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
-      UWORD effect = div->commands[cmd_idx].effect;
-
-      switch (effect >> 8) {
-      case kEffectPosJump:
-        next_div_idx = kDivsPerPat;
-        state->pat_tbl_idx = effect & 0xFF;
-        break;
-
-      case kEffectPatBreak:
-        state->div_start_idx = effect & 0xFF;
-
-        // If division index exceeds kDivsPerPat ptplayer jumps to first division.
-        if (state->div_start_idx >= kDivsPerPat) {
-          state->div_start_idx = 0;
-        }
-
-        next_div_idx = kDivsPerPat;
-        break;
-
-      case kEffectExtend:
-        switch ((effect >> 4) & 0xF) {
-        case kEffectExtPatDelay:
-          delay = effect & 0xF;
-          break;
-
-        case kEffectExtPatLoop: {
-          UWORD cmd_count = effect & 0xF;
-
-          if (cmd_count == 0) {
-            loop_idx = div_idx;
-          }
-          else if (loop_count == 0) {
-            loop_count = -1;
-          }
-          else {
-            if (loop_count == (UWORD)-1) {
-              loop_count = cmd_count;
-            }
-
-            -- loop_count;
-            next_div_idx = loop_idx;
-          }
-
-          break;
-        }
-        }
-
-      case kEffectSetSpeed:
-        if ((effect & 0xFF) == 0) {
-          status = StatusTrackEnd;
-          next_div_idx = kDivsPerPat;
-        }
-      }
-    }
-
-    div_idx = next_div_idx;
-
-    TrackStep delay_step = {0};
-
-    for (UWORD i = 0; i < delay; ++ i) {
-      CATCH(vector_append(&g.track_steps, 1, &delay_step), 0);
-    }
   }
 
-cleanup:
+ cleanup:
   return status;
 }
 
-static Status walk_song_table() {
+static Status walk_pattern_table() {
   Status status = StatusOK;
-  ModuleNonChip* nonchip = module_get_nonchip();
+  ModuleNonChip* nonchip = module_nonchip();
 
   // Keep track of which pattern table entries have been visited, to detect loops.
   static UBYTE pat_tbl_visited[kNumPatternsMax];
@@ -492,45 +355,193 @@ static Status walk_song_table() {
     }
 
     pat_tbl_visited[state.pat_tbl_idx] = 1;
+
+    // Increment here because walk_pattern may overwrite with a different pattern.
     ++ state.pat_tbl_idx;
 
-    CATCH(walk_pattern(pat_idx, &state), StatusTrackEnd);
+    CATCH(walk_pattern(pat_idx, &state), 0);
+  }
 
-    if (status == StatusTrackEnd) {
-      status = StatusOK;
-      break;
-    }
+ cleanup:
+  return status;
+}
+
+static Status walk_pattern(UWORD pat_idx,
+                           BuildState* state) {
+  Status status = StatusOK;
+  ModuleNonChip* nonchip = module_nonchip();
+  Pattern* pat = &nonchip->patterns[pat_idx];
+
+  ULONG select_samples = g.pat_select_samples[pat_idx];
+  state->loop_idx = 0;
+  state->loop_count = -1;
+
+  // Begin from division specified by the previous jump, or 0 otherwise.
+  state->div_idx = state->div_start_idx;
+  state->div_start_idx = 0;
+
+  while (state->div_idx < kDivsPerPattern) {
+    PatternDivision* div = &pat->divisions[state->div_idx];
+
+    CATCH(make_step(div, state, select_samples), 0);
+    CATCH(handle_commands(div, state), 0);
   }
 
 cleanup:
   return status;
 }
 
-Status track_build() {
+Status make_step(PatternDivision* div,
+                 BuildState* state,
+                 ULONG select_samples) {
   Status status = StatusOK;
+  UBYTE sample_in_step = 0;
+  UBYTE step_color = 0;
 
-  ASSERT(vector_size(&g.track_steps) == 0);
+  for (UWORD cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
+    PatternCommand* cmd = (PatternCommand*)&div->commands[cmd_idx];
 
-  vector_init(sizeof(TrackStep), &g.track_steps);
-  g.track_num_blocks = 0;
+    if (skip_command(cmd)) {
+      continue;
+    }
 
-  // Select samples in each pattern corresponding to collectibles.
-  select_samples();
+    static UBYTE last_sample[4] = {0};
+    UBYTE sample = (cmd->sample_hi << 4) | cmd->sample_lo;
 
-  // Start with empty steps covering the visible track.
-  CATCH(pad_visible(TRUE), 0);
+    if (! sample) {
+      sample = last_sample[cmd_idx];
+    }
+    else {
+      last_sample[cmd_idx] = sample;
+    }
 
-  // Create steps for every division in the song, in playback order.
-  CATCH(walk_song_table(), 0);
+    UWORD period = cmd->parameter;
 
-  // Finish with empty steps covering the visible track.
-  CATCH(pad_visible(FALSE), 0);
-
-cleanup:
-  if (status != StatusOK) {
-    track_free();
+    if (period && sample && (select_samples & (1UL << sample))) {
+      sample_in_step = sample;
+      step_color = g.period_to_color[period];
+    }
   }
 
+  TrackStep step = {0};
+
+  if (sample_in_step != 0) {
+    step.sample = sample_in_step;
+    step.color = step_color;
+
+    static UWORD next_lane_lut[4][4] = {
+      // Row indexed by last active lane, column indexed by random number.
+      2, 1, 2, 3,
+      1, 2, 2, 3,
+      2, 1, 2, 3,
+      3, 2, 2, 1,
+    };
+
+    UWORD random4 = random_mod4();
+
+    if (state->active_contiguous_count == 1) {
+      // Avoid lane change in contiguous segments until length is >= 2.
+      random4 = 0;
+    }
+
+    if (state->active_contiguous_count && (state->last_active_lane != 2) && (random4 == 3)) {
+      // Avoid left-right and right-left lane changes in contiguous segments.
+      random4 = 0;
+    }
+
+    step.active_lane = next_lane_lut[state->last_active_lane][random4];
+
+    if (step.active_lane != state->last_active_lane) {
+      state->last_active_lane = step.active_lane;
+      state->active_contiguous_count = 0;
+    }
+
+    ++ state->active_contiguous_count;
+    ++ g.track_num_blocks;
+  }
+  else {
+    state->active_contiguous_count = 0;
+  }
+
+  CATCH(vector_append(&g.track_steps, 1, &step), 0);
+
+cleanup:
+  return status;
+}
+
+Status handle_commands(PatternDivision* div,
+                       BuildState* state) {
+  Status status = StatusOK;
+  ModuleNonChip* nonchip = module_nonchip();
+  UBYTE delay = 0;
+  UWORD next_div_idx = state->div_idx + 1;
+
+  for (ULONG cmd_idx = 0; cmd_idx < 4; ++ cmd_idx) {
+    UWORD effect = div->commands[cmd_idx].effect;
+
+    switch (effect >> 8) {
+    case kEffectPosJump:
+      next_div_idx = kDivsPerPattern;
+      state->pat_tbl_idx = effect & 0xFF;
+      break;
+
+    case kEffectPatBreak:
+      state->div_start_idx = effect & 0xFF;
+
+      // If division index exceeds kDivsPerPattern ptplayer jumps to first division.
+      if (state->div_start_idx >= kDivsPerPattern) {
+        state->div_start_idx = 0;
+      }
+
+      next_div_idx = kDivsPerPattern;
+      break;
+
+    case kEffectExtend:
+      switch ((effect >> 4) & 0xF) {
+      case kEffectExtPatDelay:
+        delay = effect & 0xF;
+        break;
+
+      case kEffectExtPatLoop: {
+        UWORD cmd_count = effect & 0xF;
+
+        if (cmd_count == 0) {
+          state->loop_idx = state->div_idx;
+        }
+        else if (state->loop_count == 0) {
+          state->loop_count = -1;
+        }
+        else {
+          if (state->loop_count == (UWORD)-1) {
+            state->loop_count = cmd_count;
+          }
+
+          -- state->loop_count;
+          next_div_idx = state->loop_idx;
+        }
+
+        break;
+      }
+      }
+
+    case kEffectSetSpeed:
+      if ((effect & 0xFF) == 0) {
+        // Speed 0 indicates the end of the track.
+        state->pat_tbl_idx = nonchip->header.pat_tbl_size;
+        next_div_idx = kDivsPerPattern;
+      }
+    }
+  }
+
+  state->div_idx = next_div_idx;
+
+  TrackStep delay_step = {0};
+
+  for (UWORD i = 0; i < delay; ++ i) {
+    CATCH(vector_append(&g.track_steps, 1, &delay_step), 0);
+  }
+
+cleanup:
   return status;
 }
 
@@ -538,7 +549,7 @@ void track_free() {
   vector_free(&g.track_steps);
 }
 
-TrackStep* track_get_steps() {
+TrackStep* track_steps() {
   return (TrackStep*)vector_elems(&g.track_steps);
 }
 

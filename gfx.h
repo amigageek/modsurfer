@@ -22,7 +22,6 @@
 #define kNearZ (kFarZ / kFarNearRatio)
 #define kBlockGapDepth ((kFarZ - kNearZ + 1) / kNumVisibleSteps)
 #define kLaneWidth 123
-#define kNumBlockColors 12
 
 extern Status gfx_init();
 extern void gfx_fini();

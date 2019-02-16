@@ -104,7 +104,7 @@ Status system_time_micros(ULONG* time_micros) {
   // This is sufficient for seeding the random number generator.
   *time_micros = timer_io->tr_time.tv_micro;
 
- cleanup:
+cleanup:
   if (timer_opened) {
     CloseDevice((struct IORequest*)timer_io);
   }
@@ -293,24 +293,6 @@ void system_release_control() {
   allow_task_switch(TRUE);
 }
 
-void system_acquire_blitter() {
-  if (! g.blitter_owned) {
-    g.blitter_owned = TRUE;
-    OwnBlitter();
-  }
-}
-
-void system_release_blitter() {
-  if (g.blitter_owned) {
-    g.blitter_owned = FALSE;
-    DisownBlitter();
-  }
-}
-
-void system_allow_copper_blits(BOOL allow) {
-  custom.copcon = allow ? COPCON_CDANG : 0;
-}
-
 static void allow_task_switch(BOOL allow) {
   if (allow && g.task_switch_disabled) {
     Permit();
@@ -339,4 +321,22 @@ static void set_intreq(UWORD intreq) {
   for (UWORD i = 0; i < 2; ++ i) {
     custom.intreq = intreq;
   }
+}
+
+void system_acquire_blitter() {
+  if (! g.blitter_owned) {
+    g.blitter_owned = TRUE;
+    OwnBlitter();
+  }
+}
+
+void system_release_blitter() {
+  if (g.blitter_owned) {
+    g.blitter_owned = FALSE;
+    DisownBlitter();
+  }
+}
+
+void system_allow_copper_blits(BOOL allow) {
+  custom.copcon = allow ? COPCON_CDANG : 0;
 }

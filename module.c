@@ -63,6 +63,27 @@ cleanup:
   return status;
 }
 
+static Status read_header(BPTR file,
+                          LONG file_size) {
+  Status status = StatusOK;
+
+  CHECK(file_size >= sizeof(ModuleHeader), StatusInvalidMod);
+  Seek(file, 0, OFFSET_BEGINNING);
+  CHECK(Read(file, &g.header, sizeof(ModuleHeader)) == sizeof(ModuleHeader), StatusInvalidMod);
+
+  switch(g.header.tracker_id) {
+  case TRACKER_ID('M', '.', 'K', '.'):
+  case TRACKER_ID('M', '!', 'K', '!'):
+  case TRACKER_ID('F', 'L', 'T', '4'):
+    break;
+  default:
+    CHECK("Unsupported module format" && FALSE, StatusInvalidMod);
+  }
+
+cleanup:
+  return status;
+}
+
 Status module_load_all() {
   Status status = StatusOK;
   BPTR file = 0;
@@ -89,54 +110,13 @@ cleanup:
   return status;
 }
 
-ModuleHeader* module_header() {
-  return &g.header;
-}
-
-UWORD module_get_num_patterns() {
-  return g.num_patterns;
-}
-
-ModuleNonChip* module_get_nonchip() {
-  return g.nonchip;
-}
-
-APTR module_get_samples() {
-  return g.samples;
-}
-
-ULONG module_get_samples_size() {
-  return g.samples_size;
-}
-
-static Status read_header(BPTR file,
-                          LONG file_size) {
-  Status status = StatusOK;
-
-  CHECK(file_size >= sizeof(ModuleHeader), StatusInvalidMod);
-  Seek(file, 0, OFFSET_BEGINNING);
-  CHECK(Read(file, &g.header, sizeof(ModuleHeader)) == sizeof(ModuleHeader), StatusInvalidMod);
-
-  switch(g.header.tracker_id) {
-  case TRACKER_ID('M', '.', 'K', '.'):
-  case TRACKER_ID('M', '!', 'K', '!'):
-  case TRACKER_ID('F', 'L', 'T', '4'):
-    break;
-  default:
-    CHECK("Unsupported module format" && FALSE, StatusInvalidMod);
-  }
-
-cleanup:
-  return status;
-}
-
 static Status read_nonchip(BPTR file,
                            LONG file_size) {
   Status status = StatusOK;
 
-  // Calculate the number of patterns.
+  // Calculate the number of patterns by examining the song table.
   g.num_patterns = 1;
-  CHECK(g.header.pat_tbl_size <= 128, StatusInvalidMod);
+  CHECK(g.header.pat_tbl_size <= kSongMaxLen, StatusInvalidMod);
 
   for (UWORD i = 0; i < g.header.pat_tbl_size; ++ i) {
     g.num_patterns = MAX(g.num_patterns, 1 + g.header.pat_tbl[i]);
@@ -148,7 +128,6 @@ static Status read_nonchip(BPTR file,
   g.nonchip_size = sizeof(ModuleHeader) + (g.num_patterns * sizeof(Pattern));
   CHECK(g.nonchip = (ModuleNonChip*)AllocMem(g.nonchip_size, 0), StatusOutOfMemory);
 
-  CHECK(file_size >= g.nonchip_size, StatusInvalidMod);
   Seek(file, 0, OFFSET_BEGINNING);
   CHECK(Read(file, g.nonchip, g.nonchip_size) == g.nonchip_size, StatusInvalidMod);
 
@@ -163,7 +142,7 @@ static Status read_samples(BPTR file,
   // Calculate the total sample data size.
   g.samples_size = 0;
 
-  for (UWORD i = 0; i < kNumSamples; ++ i) {
+  for (UWORD i = 0; i < kNumSamplesMax; ++ i) {
     g.samples_size += 2 * g.header.sample_info[i].length_w;
   }
 
@@ -181,4 +160,20 @@ static Status read_samples(BPTR file,
 
 cleanup:
   return status;
+}
+
+ModuleHeader* module_header() {
+  return &g.header;
+}
+
+UWORD module_num_patterns() {
+  return g.num_patterns;
+}
+
+ModuleNonChip* module_nonchip() {
+  return g.nonchip;
+}
+
+APTR module_samples() {
+  return g.samples;
 }

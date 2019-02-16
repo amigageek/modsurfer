@@ -1,15 +1,30 @@
 #include "common.h"
 #include "system.h"
 
+#define kLFSRMagic 0xC2DF
+
+static UWORD random();
+
 static struct {
   UBYTE uppercase_lut[1 << kBitsPerByte];
+  UWORD prng_seed;
 } g;
 
-void common_init() {
+Status common_init() {
+  Status status = StatusOK;
+
   for (UWORD i = 0; i < ARRAY_NELEMS(g.uppercase_lut); ++ i) {
     BOOL lowercase = (i >= 'a') && (i <= 'z');
     g.uppercase_lut[i] = (UBYTE)(lowercase ? (i - ('a' - 'A')) : i);
   }
+
+  ULONG time_micros = 0;
+  ASSERT(system_time_micros(&time_micros));
+
+  g.prng_seed = (UWORD)time_micros;
+
+cleanup:
+  return status;
 }
 
 void memory_clear(APTR base,
@@ -102,4 +117,39 @@ void string_append_path(STRPTR base,
 
 void print_error(STRPTR str) {
   system_print_error(str);
+}
+
+UWORD random_mod4() {
+  static UWORD last_random = 0;
+
+  if (last_random == 0) {
+    last_random = random();
+  }
+
+  // Use all 16 bits of random number to form 2 bit values.
+  // Skipping bits can otherwise lead to unwanted correlation.
+  UWORD random4 = last_random & 3;
+  last_random >>= 2;
+
+  return random4;
+}
+
+static UWORD random() {
+  // LFSR PRNG (http://codebase64.org/doku.php?id=base:small_fast_16-bit_prng)
+  if (g.prng_seed == 0) {
+    g.prng_seed ^= kLFSRMagic;
+  }
+  else if (g.prng_seed == 0x8000) {
+    g.prng_seed = 0;
+  }
+  else {
+    UWORD carry = g.prng_seed & 0x8000;
+    g.prng_seed <<= 1;
+
+    if (carry) {
+      g.prng_seed ^= kLFSRMagic;
+    }
+  }
+
+  return g.prng_seed;
 }

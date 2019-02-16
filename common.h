@@ -48,10 +48,9 @@ typedef enum {
   StatusInvalidMod  = (1 << 3),
   StatusQuit        = (1 << 4),
   StatusPlay        = (1 << 5),
-  StatusTrackEnd    = (1 << 6),
 } Status;
 
-extern void common_init();
+extern Status common_init();  // StatusError
 extern void memory_clear(APTR base,
                          ULONG size);
 extern UWORD string_length(STRPTR str);
@@ -67,3 +66,4 @@ extern BOOL string_has_prefix(STRPTR name,
 extern void string_append_path(STRPTR base,
                                STRPTR subdir);
 extern void print_error(STRPTR str);
+extern UWORD random_mod4();

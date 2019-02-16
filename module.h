@@ -5,8 +5,9 @@
 #define kModTitleMaxLen 20
 #define kSampleNameMaxLen 22
 #define kNumPatternsMax 100
-#define kNumSamples 31
-#define kDivsPerPat 64
+#define kNumSamplesMax 31
+#define kSongMaxLen 0x80
+#define kDivsPerPattern 0x40
 
 typedef struct {
   UBYTE title[kModTitleMaxLen];
@@ -18,11 +19,11 @@ typedef struct {
     UBYTE volume;
     UWORD loop_start_w;
     UWORD loop_length_w;
-  } sample_info[kNumSamples];
+  } sample_info[kNumSamplesMax];
 
   UBYTE pat_tbl_size;
   UBYTE unused;
-  UBYTE pat_tbl[128];
+  UBYTE pat_tbl[kSongMaxLen];
   ULONG tracker_id;
 } ModuleHeader;
 
@@ -38,7 +39,7 @@ typedef struct {
 } PatternDivision;
 
 typedef struct {
-  PatternDivision divisions[kDivsPerPat];
+  PatternDivision divisions[kDivsPerPattern];
 } Pattern;
 
 typedef struct {
@@ -50,10 +51,9 @@ extern void module_open(STRPTR dir_path,
                         STRPTR file_name);
 extern void module_close();
 extern BOOL module_is_open();
-extern Status module_load_header();
-extern Status module_load_all();
+extern Status module_load_header();  // StatusError, StatusInvalidMod
+extern Status module_load_all();     // StatusError, StatusInvalidMod, StatusOutOfMemory
 extern ModuleHeader* module_header();
-extern UWORD module_get_num_patterns();
-extern ModuleNonChip* module_get_nonchip();
-extern APTR module_get_samples();
-extern ULONG module_get_samples_size();
+extern UWORD module_num_patterns();
+extern ModuleNonChip* module_nonchip();
+extern APTR module_samples();

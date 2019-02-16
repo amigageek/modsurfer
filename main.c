@@ -10,9 +10,9 @@
 int main() {
   Status status = StatusOK;
 
-  common_init();
+  ASSERT(common_init());
   ASSERT(system_init());
-  ASSERT(track_init());
+  track_init();
   ASSERT(gfx_init());
   ASSERT(menu_init());
 

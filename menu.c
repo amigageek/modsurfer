@@ -601,7 +601,7 @@ static void redraw_mod_info() {
   }
 
   if (header) {
-    UWORD num_rows = MIN(kNumSamples, kTableNumRows);
+    UWORD num_rows = MIN(kNumSamplesMax, kTableNumRows);
 
     for (UWORD row = 0; row < num_rows; ++ row) {
       STRPTR name = header->sample_info[row].name;

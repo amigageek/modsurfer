@@ -91,7 +91,7 @@ cleanup:
 
 static void game_play_loop() {
   // Reset game state.
-  g.steps = track_get_steps();
+  g.steps = track_steps();
   g.next_step_idx = 0;
   g.end_step_idx = track_unpadded_length() - 1;
   g.num_blocks_total = track_num_blocks();
@@ -138,7 +138,7 @@ static void game_play_loop() {
 }
 
 static void ptplayer_start() {
-  mt_init(&custom, module_get_nonchip(), module_get_samples(), 0);
+  mt_init(&custom, module_nonchip(), module_samples(), 0);
   mt_mastervol(&custom, kVolumeMax);
 
   // Delay ptplayer until first module row crosses all visible steps.
