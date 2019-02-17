@@ -1,6 +1,3 @@
-// FIXME: OwnBlitter
-
-
 #include "menu.h"
 #include "blit.h"
 #include "gfx.h"
@@ -93,8 +90,6 @@ Status menu_init() {
   g.slider_drag_start_mouse_y = -1;
   g.slider_drag_start_offset = -1;
 
-  string_copy(g.dir_path, "DH0:MODS/"); // FIXME
-
   system_acquire_blitter();
   gfx_draw_logo();
   gfx_init_score();
@@ -107,7 +102,7 @@ cleanup:
 }
 
 void menu_fini() {
-  module_close(); // FIXME
+  module_close();
 
   dirlist_free(&g.file_list);
 }

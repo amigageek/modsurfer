@@ -2,8 +2,6 @@
 
 #include "common.h"
 
-#include <graphics/view.h>
-
 extern Status menu_init();
 extern void menu_fini();
 extern Status menu_redraw();

@@ -2,6 +2,8 @@
 #include "custom.h"
 #include "gfx.h"
 
+// See Hardware Reference Manual for a description of all Blitter parameters.
+
 void blit_copy(APTR src_base,
                UWORD src_stride_b,
                UWORD src_x,
@@ -152,7 +154,11 @@ void blit_line(APTR dst_base,
 
   gfx_wait_blit();
 
-  custom.bltcon0 = ((x0 & 0xF) << BLTCON0_ASH0_SHF) | BLTCON0_USEA | BLTCON0_USEC | BLTCON0_USED | (0xCA << BLTCON0_LF0_SHF);
+  // A = Line parameters
+  // C = Destination data (for region outside mask)
+  // D = Destination data
+  custom.bltcon0 = ((x0 & 0xF) << BLTCON0_ASH0_SHF) | BLTCON0_USEA
+                 | BLTCON0_USEC | BLTCON0_USED | (0xCA << BLTCON0_LF0_SHF);
   custom.bltcon1 =
     ((x0 & 0xF) << BLTCON1_TEX0_SHF) |
     ((((4 * dmin) - (2 * dmax)) < 0 ? 1 : 0) << BLTCON1_SIGN_SHF) |

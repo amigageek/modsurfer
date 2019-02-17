@@ -1,5 +1,6 @@
 #pragma once
 
+#include <exec/types.h>
 #include <hardware/custom.h>
 
 extern void mt_install_cia(volatile struct Custom* custom __asm("a6"),

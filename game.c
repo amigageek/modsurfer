@@ -245,7 +245,7 @@ static void handle_fade() {
 
     // Fade all visible colors in/out every other frame.
     // Update colors every frame since there are two copperlists.
-    gfx_fade_action(g.running, ((g.fade_frames & 1) == 0) ? TRUE : FALSE);
+    gfx_fade_play(g.running, ((g.fade_frames & 1) == 0) ? TRUE : FALSE);
 
     // Fade volume to zero during fade out. No fade in.
     if (! g.running) {

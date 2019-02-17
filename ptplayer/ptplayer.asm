@@ -160,8 +160,8 @@ n_sfxpri	rs.b	1
 n_freecnt	rs.b	1
 n_musiconly	rs.b	1
 	ifd	MODSURFER
-n_ms_lastsample	rs.b	1
-n_pad		rs.b	1
+n_ms_lastsample	rs.b	1		; last sample played on channel, for suppression
+n_pad		rs.b	1		; align data structure to word boundary
 	endc
 n_sizeof	rs.b	0
 
@@ -518,6 +518,7 @@ mt_reset:
 	clr.b	mt_E8Trigger(a4)
 
 	ifd	MODSURFER
+	; reset processed steps, number of rows to wait, BPM
 	clr.b	ms_StepCount(a4)
 	clr.b	ms_HoldRows(a4)
 	move.b	#125,ms_BeatsPerMin(a4)
@@ -945,12 +946,15 @@ _mt_music:
 	move.b	d7,mt_Counter(a4)
 
 	ifd	MODSURFER
+	; announce new row for game to synchronize with
 	addq.b	#1,ms_StepCount(a4)
+
+	; stop processing if asked to wait one or more rows
 	cmp.b	#0,ms_HoldRows(a4)
-	beq	no_hold_row
+	beq	.no_hold_row
 	subq.b	#1,ms_HoldRows(a4)
 	rts
-no_hold_row:
+.no_hold_row:
 	endc
 
 	tst.b	mt_PattDelTime2(a4)
@@ -1306,6 +1310,8 @@ mt_playvoice:
 	move.b	n_ms_lastsample(a2),d1
 	jmp	.3b
 .3a:
+	; track this sample in case it's repeated and we need to suppress it
+	; otherwise we have no sample number to match with the game's request
 	move.b	d1,n_ms_lastsample(a2)
 .3b:
 	; play next note at zero volume if the game suppressed this sample
@@ -1379,6 +1385,7 @@ set_loop:
 	move.b	(a0,d1.w),d1
 
 	ifd	MODSURFER
+	; set volume to zero if game suppressed sample
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d1
@@ -1834,6 +1841,7 @@ mt_tremolo:
 	move.b	(a0,d0.w),d0
 
 	ifd	MODSURFER
+	; set volume to zero if game suppressed sample
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d0
@@ -1878,6 +1886,7 @@ set_vol:
 	move.b	(a0,d0.w),d0
 
 	ifd	MODSURFER
+	; set volume to zero if game suppressed sample
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d0
@@ -1914,6 +1923,7 @@ mt_volchange:
 	move.b	(a0,d4.w),d4
 
 	ifd	MODSURFER
+	; set volume to zero if game suppressed sample
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d4
@@ -1964,6 +1974,7 @@ mt_setspeed:
 	move.b	d0,CIAB+CIATAHI
 
 	ifd	MODSURFER
+	; track BPM for world Z per second calculation
 	move.b	d4,ms_BeatsPerMin(a4)
 	endc
 
@@ -2190,6 +2201,7 @@ mt_notecut:
 	move.w	d7,n_volume(a2)
 
 	ifd	MODSURFER
+	; set volume to zero if game suppressed sample
 	tst.b	ms_SuppressNext(a4)
 	beq	.no_suppress
 	moveq	#0,d7
@@ -2257,9 +2269,12 @@ mt_updatefunk:
 
 .2:	rts
 
+	ifd MODSURFER
 	xdef _ms_camera_z_inc
 _ms_camera_z_inc:
-	;; camera_z_inc = (kBlockGapDepth * ms_BeatsPerMin) / (125 * mt_Speed)
+	; calculate Z increment per frame for current BPM and ticks/div
+	; camera_z_inc = (kBlockGapDepth * ms_BeatsPerMin) / (125 * mt_Speed)
+	; d0 = kBlockGapDepth
 	lea	mt_data(pc),a0
 	moveq	#0,d1
 	move.b	ms_BeatsPerMin(a0),d1
@@ -2272,6 +2287,7 @@ _ms_camera_z_inc:
 	mulu.w	#125,d1
 	divu.w	d1,d0
 	rts
+	endc
 
 mt_FunkTable:
 	dc.b	0,5,6,7,8,10,11,13,16,19,22,26,32,43,64,128
@@ -3039,11 +3055,11 @@ mt_E8Trigger	rs.b	1		; exported as _mt_E8Trigger
 mt_MusicChannels rs.b	1		; exported as _mt_MusicChannels
 
 	ifd	MODSURFER
-ms_StepCount	rs.b	1
-ms_HoldRows	rs.b	1
-ms_SuppressSample rs.b	1
-ms_SuppressNext	rs.b	1
-ms_BeatsPerMin	rs.b	1
+ms_StepCount	rs.b	1		; number of unprocessed rows for game to handle
+ms_HoldRows	rs.b	1		; number of rows to wait before playing a new one
+ms_SuppressSample rs.b	1		; number (1-31) of next sample to play at zero volume
+ms_SuppressNext	rs.b	1		; boolean to suppress next sample played on this channel
+ms_BeatsPerMin	rs.b	1		; current BPM
 	endc
 
 mt_data:

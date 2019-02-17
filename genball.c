@@ -1,3 +1,10 @@
+// A miniature ray tracer to generate rotation frames for the ball sprite.
+// One frame for each rotation around Z to the left, center, and right.
+//
+// Rotation around X is achieved with color cycling. There are 14 colors
+// per sprite, 7 red and 7 white. Shift each of this colors along by one
+// to give the illusion of forwards rotation.
+
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>

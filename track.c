@@ -112,7 +112,7 @@ Status track_build() {
   // Finish with empty steps covering the visible track.
   CATCH(pad_visible(FALSE), 0);
 
- cleanup:
+cleanup:
   if (status != StatusOK) {
     track_free();
   }
@@ -328,7 +328,7 @@ static Status pad_visible(BOOL lead_in) {
     CATCH(vector_append(&g.track_steps, 1, &step), 0);
   }
 
- cleanup:
+cleanup:
   return status;
 }
 
@@ -362,7 +362,7 @@ static Status walk_pattern_table() {
     CATCH(walk_pattern(pat_idx, &state), 0);
   }
 
- cleanup:
+cleanup:
   return status;
 }
 

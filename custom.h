@@ -25,6 +25,8 @@ extern volatile struct Custom custom;
 #define BPLCON0_BPU_SHF  0xC
 #define BPLCON0_COLOR    0x0200
 #define COPCON_CDANG     0x2
+#define DIWHIGH_H10_SHF  0xD
+#define DIWHIGH_V8_SHF   0x8
 #define DIWSTOP_V0_SHF   0x8
 #define DIWSTRT_V0_SHF   0x8
 #define DMACON_SET       0x8000

@@ -10,6 +10,7 @@ int main() {
   printf("#define kFFTSize (1 << (kFFTSizeLog2))\n\n", kFFTSizeLog2);
   printf("static WORD FFTSinLUT[kFFTSize - (kFFTSize / 4)] = {");
 
+  // Fixed-point sin() lookup table for FFT (3/4 of whole cycle).
   for (int i = 0; i < (kFFTSize - (kFFTSize / 4)); ++ i) {
     double ang = (double)i / (double)kFFTSize * 2.0 * M_PI;
     double ang_sin = sin(ang);
@@ -23,7 +24,10 @@ int main() {
   }
 
   printf("\n};\n\n");
-  printf("static UWORD FFTReorder[kFFTSize] = {\n");
+
+  // Indices for reordering real data to FFT input.
+  // Real to half-size complex FFT, and decimation in time.
+  printf("static UWORD FFTReorder[kFFTSize] = {");
 
   for (int i = 0; i < kFFTSize; ++ i) {
     // Decimation in time: reverse bits of index.
