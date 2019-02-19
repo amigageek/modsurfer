@@ -36,6 +36,7 @@
 #define kFadeActionNumColors 52
 #define kBallEdge 0x20
 #define kBallAngleLimit (((((kBallNumAngles * 2) + 1) << 11) / 2) - 1)
+#define kBallMouseRotateShift 7
 
 // Defined in gfx.asm
 extern void update_coplist(UWORD* colors __asm("a2"),
@@ -821,7 +822,7 @@ static void update_sprite(UWORD* cop_list,
 
   static WORD sprite_angle = 0;
   WORD sprite_angle_bound = (sprite_dx < 0 ? -kBallAngleLimit : (sprite_dx > 0 ? kBallAngleLimit : 0));
-  UWORD sprite_angle_inc = camera_z_inc << 1;
+  UWORD sprite_angle_inc = (camera_z_inc << 1) + (ABS(sprite_dx) << kBallMouseRotateShift);
 
   if ((sprite_dx < 0) || (sprite_dx == 0 && sprite_angle > 0)) {
     sprite_angle = MAX(sprite_angle_bound, sprite_angle - sprite_angle_inc);
