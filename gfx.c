@@ -25,6 +25,7 @@
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 5
+#define kHeaderScoreLeft ((kDispWidth - 20) - (6 * kFontSpacing))
 #define kPtrSprEdge 0x10
 #define kPtrSprOffX -6
 #define kPtrSprOffY -1
@@ -366,7 +367,6 @@ static void get_display_window(struct ViewPort* viewport,
 
 static UWORD* make_copperlist_score(UWORD* cl) {
   APTR dst_row_base = gfx_display_planes() + (kHeaderTextTop * kDispStride);
-  UWORD left = (kDispWidth + kHeaderTextGap) / 2;
 
   // One blit for each character of the score, up to 5: "XXX.X%"
   for (WORD char_idx = 4; char_idx >= 0; -- char_idx) {
@@ -376,7 +376,7 @@ static UWORD* make_copperlist_score(UWORD* cl) {
     }
 
     // Calculate word-alignment and sub-word shifts for blitter.
-    UWORD dst_x = left + (char_idx * kFontSpacing);
+    UWORD dst_x = kHeaderScoreLeft + (char_idx * kFontSpacing);
     UWORD start_x_word = dst_x >> 4;
     UWORD end_x_word = ((dst_x + kFontWidth) + 0xF) >> 4;
     UWORD width_words = end_x_word - start_x_word;
@@ -535,13 +535,11 @@ void gfx_draw_logo() {
 void gfx_draw_title(STRPTR title) {
   UWORD title_length = string_length(title);
 
-  UWORD text_right = (kDispWidth - kHeaderTextGap) / 2;
-  UWORD text_width = title_length * kFontSpacing - 1;
-  UWORD text_left = text_right - text_width;
+  UWORD text_width = (title_length * kFontSpacing) - 1;
+  UWORD text_left = (kDispWidth / 2) - (text_width / 2);
 
-  UWORD max_width = kModTitleMaxLen * kFontSpacing - 1;
-  UWORD clear_left = text_right - max_width;
-  UWORD clear_width = text_left - clear_left;
+  UWORD clear_width = kModTitleMaxLen * kFontSpacing - 1;
+  UWORD clear_left = (kDispWidth / 2) - (clear_width / 2);
 
   for (UWORD plane_idx = 0; plane_idx < kDispDepth; ++ plane_idx) {
     if (kHeaderTextPen & (1 << plane_idx)) {
@@ -556,8 +554,7 @@ void gfx_draw_title(STRPTR title) {
 }
 
 void gfx_init_score() {
-  UWORD left = (kDispWidth + kHeaderTextGap) / 2;
-  gfx_draw_text("  0.0%", -1, left, kHeaderTextTop, kHeaderTextPen, TRUE);
+  gfx_draw_text("  0.0%", -1, kHeaderScoreLeft, kHeaderTextTop, kHeaderTextPen, TRUE);
 }
 
 #define kFadeMenuNumColors 5
