@@ -12,6 +12,7 @@
 #define kVUMeterZDecay 0x1000
 #define kVolumeMax 0x40
 #define kNoSuppressSample 0xFF // Any unused sample number
+#define kBallDXMax 90 // Larger number = sharper movement
 
 static void game_play_loop();
 static void ptplayer_start();
@@ -19,6 +20,7 @@ static void ptplayer_stop();
 static void handle_steps();
 static void handle_input();
 static UBYTE read_mouse_x();
+static BYTE read_joy_dx();
 static void handle_collision();
 static void handle_fade();
 static void handle_gfx();
@@ -34,12 +36,23 @@ static struct {
   UWORD camera_z_inc;
   UWORD vu_meter_view_z;
   WORD ball_x;
+  BYTE ball_dx_smoothed[(2 * kBallDXMax) + 1];
   UBYTE prev_mouse_x;
   UWORD score;
   UWORD fade_frames;
   UWORD timeout_frames;
   BOOL running;
 } g;
+
+void game_init() {
+  // Index into table is desired ball X step in pixels.
+  // Result is smoothed/capped per-frame step in pixels.
+  for (UWORD i = 0; i < ARRAY_NELEMS(g.ball_dx_smoothed); ++ i) {
+    WORD ball_dx = i - kBallDXMax;
+    BYTE smooth_dx = (ball_dx + 1) / 2;
+    g.ball_dx_smoothed[i] = MAX(-kBallDXMax, MIN(kBallDXMax, smooth_dx));
+  }
+}
 
 Status game_main_loop() {
   Status status = StatusOK;
@@ -189,12 +202,51 @@ static void handle_steps() {
 }
 
 static void handle_input() {
+  static BOOL mouse_active = TRUE;
+
   // Move ball left/right with mouse movement.
   UBYTE mouse_x = read_mouse_x();
-  BYTE mouse_delta_x = mouse_x - g.prev_mouse_x;
-  g.prev_mouse_x = mouse_x;
+  BYTE mouse_dx = mouse_x - g.prev_mouse_x;
 
-  g.ball_x = MAX(-kLaneWidth, MIN(kLaneWidth, g.ball_x + mouse_delta_x));
+  if (mouse_dx != 0) {
+    g.prev_mouse_x = mouse_x;
+    g.ball_x += mouse_dx;
+
+    mouse_active = TRUE;
+  }
+
+  // Move ball left/right with keyboard or joystick movement.
+  WORD target_x = g.ball_x;
+  BYTE joy_dx = read_joy_dx();
+
+  BOOL key_left = keyboard_state[kKeycodeA];
+  BOOL key_right = keyboard_state[kKeycodeD];
+
+  if (key_left || key_right || joy_dx) {
+    mouse_active = FALSE;
+
+    if (key_left || (joy_dx < 0)) {
+      target_x = -kLaneWidth;
+    }
+    else if (key_right || (joy_dx > 0)) {
+      target_x = kLaneWidth;
+    }
+  }
+  else if (! mouse_active) {
+    // Return to center if nothing pressed in keyboard/joystick mode.
+    target_x = 0;
+  }
+
+  // Calculate frame motion to begin moving ball towards target X.
+  // This is slower closer to the end of motion to smooth movement.
+  WORD ball_dx = MAX(-kBallDXMax, MIN(kBallDXMax, target_x - g.ball_x));
+
+  if (ball_dx != 0) {
+    g.ball_x += g.ball_dx_smoothed[ball_dx + kBallDXMax];
+  }
+
+  // Clamp ball X position to within bounds.
+  g.ball_x = MAX(-kLaneWidth, MIN(kLaneWidth, g.ball_x));
 
   // Begin fade out if the escape key is pressed.
   if (g.running && keyboard_state[kKeycodeEsc]) {
@@ -204,7 +256,12 @@ static void handle_input() {
 }
 
 static UBYTE read_mouse_x() {
-  return custom.joy0dat & JOY0DAT_XALL;
+  return custom.joy0dat & JOYxDAT_XALL;
+}
+
+static BYTE read_joy_dx() {
+  UWORD joy1dat = custom.joy1dat;
+  return (joy1dat & JOYxDAT_Y1) ? -1 : ((joy1dat & JOYxDAT_X1) ? 1 : 0);
 }
 
 static void handle_collision() {

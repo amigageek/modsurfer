@@ -15,6 +15,7 @@ int main() {
   track_init();
   ASSERT(gfx_init());
   ASSERT(menu_init());
+  game_init();
 
   ASSERT(game_main_loop());
 

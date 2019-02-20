@@ -4,6 +4,8 @@
 #include "dtypes.h"
 
 #define kNumKeycodes 0x80
+#define kKeycodeA 0x20
+#define kKeycodeD 0x22
 #define kKeycodeEsc 0x45
 
 extern Status system_init();

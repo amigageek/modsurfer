@@ -43,7 +43,9 @@ extern volatile struct Custom custom;
 #define INTENA_PORTS     0x0008
 #define INTREQ_SET       0x8000
 #define INTREQ_CLEARALL  0x7FFF
-#define JOY0DAT_XALL     0x00FF
+#define JOYxDAT_XALL     0x00FF
+#define JOYxDAT_Y1       0x0200
+#define JOYxDAT_X1       0x0002
 #define SPRxCTL_EV0_SHF  0x8
 #define SPRxCTL_ATT_SHF  0x7
 #define SPRxCTL_SV8_SHF  0x2
