@@ -502,7 +502,7 @@ void gfx_draw_text(STRPTR text,
   APTR dst_row_base = gfx_display_planes() + (top * kDispStride);
 
   for (UWORD char_idx = 0; text[char_idx] && max_chars; ++ char_idx, -- max_chars) {
-    UWORD glyph_idx = MIN(text[char_idx] - 0x20, kFontNGlyphs - 1);
+    UWORD glyph_idx = MIN(MAX(0x20, text[char_idx]) - 0x20, kFontNGlyphs - 1);
     blit_char((UBYTE*)font_planes, glyph_idx, dst_row_base, left, color, replace_bg);
 
     left += kFontSpacing;
