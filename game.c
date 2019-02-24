@@ -125,7 +125,7 @@ static void game_play_loop() {
 
   // Enable copper blits after we're done with the blitter.
   gfx_wait_blit();
-  system_allow_copper_blits(TRUE);
+  gfx_allow_copper_blits(TRUE);
 
   ptplayer_start();
 
@@ -143,7 +143,8 @@ static void game_play_loop() {
   ptplayer_stop();
 
   // Disable copper blits before using the blitter.
-  system_allow_copper_blits(FALSE);
+  gfx_allow_copper_blits(FALSE);
+  gfx_wait_vblank();
 
   // All colors faded to zero by this point.
   gfx_clear_body();

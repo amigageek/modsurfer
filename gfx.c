@@ -21,7 +21,7 @@
 #define kDispFetchExtraWord 0x1 // extra word fetched for horizontal scrolling
 #define kDrawHeight ((4 * kDispHeight) / 5)
 #define kDrawTop (kDispHeight - kDrawHeight)
-#define kDispCopListSizeW (386 + ((kDrawHeight + 1) * 20))
+#define kDispCopListSizeW (388 + ((kDrawHeight + 1) * 20))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 5
@@ -330,6 +330,10 @@ cleanup:
 
 static UWORD* make_copperlist_score(UWORD* cl) {
   APTR dst_row_base = gfx_display_planes() + (kHeaderTextTop * kDispStride);
+
+  // Optionally terminate copperlist to disable copper blits.
+  *(cl ++) = 0xFFFF;
+  *(cl ++) = 0xFFFE;
 
   // One blit for each character of the score, up to 5: "XXX.X%"
   for (WORD char_idx = 4; char_idx >= 0; -- char_idx) {
@@ -744,7 +748,7 @@ void gfx_update_display(TrackStep *step_near,
 
 static void update_score(UWORD* cop_list,
                          UWORD score_frac) {
-  UWORD* cl = &cop_list[g.cop_list_score_idx] + 19;
+  UWORD* cl = &cop_list[g.cop_list_score_idx] + 21;
 
   // Four digits for percentage: XXX.X%
   for (WORD char_idx = 0; char_idx < 4; ++ char_idx) {
@@ -877,4 +881,10 @@ void gfx_wait_blit() {
   custom.dmacon = DMACON_SET | DMACON_BLITPRI;
   while (custom.dmaconr & DMACONR_BBUSY);
   custom.dmacon = DMACON_BLITPRI;
+}
+
+void gfx_allow_copper_blits(BOOL allow) {
+  for (UWORD i = 0; i < 2; ++ i) {
+    cop_lists[i][g.cop_list_score_idx] = (allow ? 0x1 : 0xFFFF);
+  }
 }

@@ -212,9 +212,9 @@ void system_acquire_control() {
   // Our new copperlist expects exclusive access to the blitter.
   gfx_wait_blit();
 
-  // Save and disable copper access to blitter registers.
+  // Save and enable copper access to blitter registers.
   g.save_copcon = custom.copcon;
-  custom.copcon = 0;
+  custom.copcon = COPCON_CDANG;
 
   // Save active view/copperlist and load our copperlist.
   g.save_view = GfxBase->ActiView;
@@ -335,8 +335,4 @@ void system_release_blitter() {
     g.blitter_owned = FALSE;
     DisownBlitter();
   }
-}
-
-void system_allow_copper_blits(BOOL allow) {
-  custom.copcon = allow ? COPCON_CDANG : 0;
 }

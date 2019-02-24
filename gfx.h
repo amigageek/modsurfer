@@ -48,3 +48,4 @@ extern void gfx_update_display(TrackStep *step_near,
                                UWORD score_frac);
 extern void gfx_wait_vblank();
 extern void gfx_wait_blit();
+extern void gfx_allow_copper_blits(BOOL allow);

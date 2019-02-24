@@ -19,6 +19,5 @@ extern void system_acquire_control();
 extern void system_release_control();
 extern void system_acquire_blitter();
 extern void system_release_blitter();
-extern void system_allow_copper_blits(BOOL allow);
 
 extern volatile UBYTE keyboard_state[kNumKeycodes];
