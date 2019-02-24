@@ -4,9 +4,8 @@
 #include "module.h"
 #include "system.h"
 
-#include <proto/exec.h>
+#include <devices/inputevent.h>
 #include <proto/graphics.h>
-#include <proto/intuition.h>
 
 #define kFooterHeight 13
 
@@ -49,13 +48,25 @@
 #define kLightPen 3
 #define kTextModPen 4
 
+typedef struct {
+  BOOL escape_pressed;
+  BOOL mouse_pressed;
+  BOOL disk_removed;
+  UWORD mouse_x;
+  UWORD mouse_y;
+  UWORD mouse_2x; // Mouse tracked at double resolution for finer movement.
+  UWORD mouse_2y;
+} InputState;
+
+static struct InputEvent* input_handler(struct InputEvent* event_list __asm("a0"),
+                                        InputState* state __asm("a1"));
 static Status refresh_file_list();
-static Status mouse_pressed(UWORD mouse_x, UWORD mouse_y);
-static void mouse_released(UWORD mouse_x, UWORD mouse_y);
+static Status mouse_button_down(UWORD mouse_x, UWORD mouse_y);
+static void mouse_button_up(UWORD mouse_x, UWORD mouse_y);
 static void mouse_moved(UWORD mouse_x, UWORD mouse_y);
-static Status check_mouse_pressed_file_list(UWORD mouse_x, UWORD mouse_y);
-static void check_mouse_pressed_slider(UWORD mouse_x, UWORD mouse_y);
-static BOOL check_mouse_pressed_start_button(UWORD mouse_x, UWORD mouse_y);
+static Status check_mouse_button_down_file_list(UWORD mouse_x, UWORD mouse_y);
+static void check_mouse_button_down_slider(UWORD mouse_x, UWORD mouse_y);
+static BOOL check_mouse_button_down_start_button(UWORD mouse_x, UWORD mouse_y);
 static Status file_selected();
 static void slider_move(WORD unclamped_offset);
 static void slider_step(UWORD direction);
@@ -71,6 +82,7 @@ static void draw_frames();
 static void draw_footer_text();
 
 static struct {
+  volatile InputState input_state;
   UBYTE dir_path[0x100];
   dirlist_t file_list;
   UWORD fl_entry_offset;
@@ -89,20 +101,25 @@ Status menu_init() {
   g.fl_entry_selected = -1;
   g.slider_drag_start_mouse_y = -1;
   g.slider_drag_start_offset = -1;
+  g.input_state.mouse_2x = kDispWidth;
+  g.input_state.mouse_2y = kDispHeight;
+  g.input_state.mouse_x = g.input_state.mouse_2x / 2;
+  g.input_state.mouse_y = g.input_state.mouse_2y / 2;
 
-  system_acquire_blitter();
+  ASSERT(system_add_input_handler(input_handler, (APTR)&g.input_state));
+
   gfx_draw_logo();
   gfx_init_score();
+  gfx_update_pointer(g.input_state.mouse_x, g.input_state.mouse_y);
   ASSERT(refresh_file_list());
 
 cleanup:
-  system_release_blitter();
-
   return status;
 }
 
 void menu_fini() {
   module_close();
+  system_remove_input_handler();
 
   dirlist_free(&g.file_list);
 }
@@ -110,75 +127,102 @@ void menu_fini() {
 Status menu_redraw() {
   Status status = StatusOK;
 
-  system_acquire_blitter();
-
   gfx_clear_body();
   redraw_body();
   draw_frames();
   draw_footer_text();
 
 cleanup:
-  system_release_blitter();
-
   return status;
+}
+
+static struct InputEvent* input_handler(struct InputEvent* event_list __asm("a0"),
+                                        InputState* state __asm("a1")) {
+  for (struct InputEvent* event = event_list; event; event = event->ie_NextEvent) {
+    switch (event->ie_Class) {
+    case IECLASS_RAWKEY:
+      if (event->ie_Code == kKeycodeEsc) {
+        state->escape_pressed = TRUE;
+      }
+
+      break;
+
+    case IECLASS_RAWMOUSE:
+      if (event->ie_Code == IECODE_LBUTTON) {
+        state->mouse_pressed = TRUE;
+      }
+      else if (event->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
+        state->mouse_pressed = FALSE;
+      }
+
+      // Mouse movement is tracked at high resolution.
+      // Track this but downsample to low resolution when positioning sprite.
+      state->mouse_2x = MAX(0, MIN((kDispWidth * 2) - 1, state->mouse_2x + event->ie_position.ie_xy.ie_x));
+      state->mouse_2y = MAX(0, MIN((kDispHeight * 2) - 1, state->mouse_2y + event->ie_position.ie_xy.ie_y));
+
+      UWORD mouse_x = state->mouse_2x >> 1;
+      UWORD mouse_y = state->mouse_2y >> 1;
+
+      if ((mouse_x != state->mouse_x) || (mouse_y != state->mouse_y)) {
+        state->mouse_x = mouse_x;
+        state->mouse_y = mouse_y;
+        gfx_update_pointer(mouse_x, mouse_y);
+      }
+
+      break;
+
+    case IECLASS_DISKREMOVED:
+      state->disk_removed = TRUE;
+      break;
+    }
+
+    // Suppress all event reporting to Intuition.
+    event->ie_Class = IECLASS_NULL;
+  }
+
+  return event_list;
 }
 
 Status menu_event_loop() {
   Status status = StatusOK;
-  struct Window* window = gfx_window();
-
-  // Discard any messages received before/after system takeover.
-  for (struct Message* msg; msg = GetMsg(window->UserPort); ) {
-    ReplyMsg(msg);
-  }
-
-  // Trigger hover events for initial mouse position.
-  mouse_moved(window->MouseX, window->MouseY);
-
-  ULONG wait_signals = (1 << window->UserPort->mp_SigBit) | SIGBREAKF_CTRL_C;
+  BOOL mouse_pressed = FALSE;
+  UWORD last_mouse_x = -1;
+  UWORD last_mouse_y = -1;
 
   while (status == StatusOK) {
-    ULONG signals = Wait(wait_signals);
+    WaitTOF();
 
-    if (signals & SIGBREAKF_CTRL_C) {
-      status = StatusQuit;
-      break;
+    // Handle mouse movement events.
+    if (g.input_state.mouse_x != last_mouse_x ||
+        g.input_state.mouse_y != last_mouse_y) {
+      last_mouse_x = g.input_state.mouse_x;
+      last_mouse_y = g.input_state.mouse_y;
+
+      mouse_moved(last_mouse_x, last_mouse_y);
     }
 
-    for (struct IntuiMessage* msg; msg = (struct IntuiMessage*)GetMsg(window->UserPort); ) {
-      system_acquire_blitter();
+    // Handle mouse button down events.
+    if (g.input_state.mouse_pressed && (! mouse_pressed)) {
+      mouse_pressed = TRUE;
+      CATCH(mouse_button_down(last_mouse_x, last_mouse_y), StatusPlay);
+    }
 
-      switch (msg->Class) {
-      case IDCMP_VANILLAKEY:
-        if (msg->Code == '\e') {
-          status = StatusQuit;
-        }
-        break;
+    // Handle mouse button up events.
+    if ((! g.input_state.mouse_pressed) && mouse_pressed) {
+      mouse_pressed = FALSE;
+      mouse_button_up(last_mouse_x, last_mouse_y);
+    }
 
-      case IDCMP_MOUSEBUTTONS:
-        if (msg->Code == SELECTDOWN) {
-          CATCH(mouse_pressed(msg->MouseX, msg->MouseY), StatusPlay);
-        }
-        else if (msg->Code == SELECTUP) {
-          mouse_released(msg->MouseX, msg->MouseY);
-        }
-        break;
+    // Handle disk removed events.
+    if (g.input_state.disk_removed) {
+      g.input_state.disk_removed = FALSE;
 
-      case IDCMP_MOUSEMOVE:
-        mouse_moved(msg->MouseX, msg->MouseY);
-        break;
+      ASSERT(refresh_file_list());
+      redraw_body();
+    }
 
-      case IDCMP_DISKREMOVED:
-        // Avoid disk requester if path referenced removed disk.
-        string_copy(g.dir_path, "");
-        ASSERT(refresh_file_list());
-        redraw_body();
-        break;
-      }
-
-      system_release_blitter();
-
-      ReplyMsg((struct Message*)msg);
+    if (g.input_state.escape_pressed) {
+      status = StatusQuit;
     }
   }
 
@@ -195,7 +239,6 @@ static Status refresh_file_list() {
 
   dirlist_free(&g.file_list);
 
-  system_release_blitter();
   CATCH(system_list_path(g.dir_path, &g.file_list), StatusInvalidPath);
 
   if (status == StatusInvalidPath) {
@@ -215,19 +258,17 @@ static Status refresh_file_list() {
   module_close();
 
 cleanup:
-  system_acquire_blitter();
-
   return status;
 }
 
-static Status mouse_pressed(UWORD mouse_x,
-                            UWORD mouse_y) {
+static Status mouse_button_down(UWORD mouse_x,
+                                UWORD mouse_y) {
   Status status = StatusOK;
 
-  ASSERT(check_mouse_pressed_file_list(mouse_x, mouse_y));
-  check_mouse_pressed_slider(mouse_x, mouse_y);
+  ASSERT(check_mouse_button_down_file_list(mouse_x, mouse_y));
+  check_mouse_button_down_slider(mouse_x, mouse_y);
 
-  if (check_mouse_pressed_start_button(mouse_x, mouse_y)) {
+  if (check_mouse_button_down_start_button(mouse_x, mouse_y)) {
     status = StatusPlay;
   }
 
@@ -235,8 +276,8 @@ cleanup:
   return status;
 }
 
-static void mouse_released(UWORD mouse_x,
-                           UWORD mouse_y) {
+static void mouse_button_up(UWORD mouse_x,
+                            UWORD mouse_y) {
   if (g.slider_drag_start_mouse_y != -1) {
     g.slider_drag_start_mouse_y = -1;
     g.slider_drag_start_offset = -1;
@@ -278,8 +319,8 @@ static void mouse_moved(UWORD mouse_x,
   }
 }
 
-static Status check_mouse_pressed_file_list(UWORD mouse_x,
-                                            UWORD mouse_y) {
+static Status check_mouse_button_down_file_list(UWORD mouse_x,
+                                                UWORD mouse_y) {
   Status status = StatusOK;
 
   WORD fl_entry_mouse = file_list_entry_at(mouse_x, mouse_y);
@@ -316,8 +357,8 @@ cleanup:
   return status;
 }
 
-static void check_mouse_pressed_slider(UWORD mouse_x,
-                                       UWORD mouse_y) {
+static void check_mouse_button_down_slider(UWORD mouse_x,
+                                           UWORD mouse_y) {
   if (mouse_x >= kSliderLeft && mouse_y >= kSliderTop) {
     if (mouse_y < (kSliderTop + g.slider_offset)) {
       // Clicked above slider, step slider upwards.
@@ -336,8 +377,8 @@ static void check_mouse_pressed_slider(UWORD mouse_x,
   }
 }
 
-static BOOL check_mouse_pressed_start_button(UWORD mouse_x,
-                                             UWORD mouse_y) {
+static BOOL check_mouse_button_down_start_button(UWORD mouse_x,
+                                                 UWORD mouse_y) {
   if (module_is_open() && (mouse_y >= kFrameY0) && (mouse_y <= kFrameY1) && (mouse_x <= kFrameX1)) {
     menu_redraw_button("BUILDING TRACK...");
     return TRUE;
@@ -357,9 +398,7 @@ static Status file_selected() {
   module_close();
   module_open(g.dir_path, file_name);
 
-  system_release_blitter();
   CATCH(module_load_header(), StatusInvalidMod);
-  system_acquire_blitter();
 
   if (status == StatusInvalidMod) {
     module_close();

@@ -23,9 +23,8 @@
 
 extern Status gfx_init();
 extern void gfx_fini();
-extern struct Window* gfx_window();
 extern UBYTE* gfx_display_planes();
-extern struct View* gfx_view();
+extern void gfx_setup_copperlist(BOOL for_menu);
 extern void gfx_draw_text(STRPTR text,
                           UWORD max_chars,
                           UWORD left,
@@ -40,6 +39,8 @@ extern void gfx_fade_play(BOOL fade_in,
                           BOOL delay_fade);
 extern void gfx_clear_body();
 extern void gfx_draw_track();
+extern void gfx_update_pointer(UWORD pointer_x,
+                               UWORD pointer_y);
 extern void gfx_update_display(TrackStep *step_near,
                                WORD ball_x,
                                ULONG camera_z,

@@ -4,6 +4,7 @@
 #include "ptplayer/ptplayer.h"
 
 #include <clib/alib_protos.h>
+#include <devices/input.h>
 #include <devices/timer.h>
 #include <dos/dosextens.h>
 #include <dos/filehandler.h>
@@ -18,11 +19,14 @@
 #define kLibVerKick3 39
 #define kVBRLvl2IntOffset 0x68
 
+// Defined in system.asm
 extern void level2_int();
 
 static void allow_task_switch(BOOL allow);
 static ULONG get_vbr();
 static void set_intreq(UWORD intreq);
+static void acquire_blitter();
+static void release_blitter();
 
 struct GfxBase* GfxBase;
 struct IntuitionBase* IntuitionBase;
@@ -30,6 +34,11 @@ struct IntuitionBase* IntuitionBase;
 static struct {
   BOOL wb_closed;
   APTR save_windowptr;
+  struct MsgPort* input_port;
+  struct IOStdReq* input_io;
+  BOOL input_opened;
+  struct Interrupt* input_handler;
+  BOOL input_handler_added;
   BOOL task_switch_disabled;
   BOOL blitter_owned;
   UWORD save_copcon;
@@ -55,6 +64,10 @@ Status system_init() {
   g.save_windowptr = process->pr_WindowPtr;
   process->pr_WindowPtr = (APTR)-1;
 
+  // Hold blitter for the lifetime of our process.
+  // Input and display are blocked so Intuition shouldn't mind.
+  acquire_blitter();
+
 cleanup:
   if (status != StatusOK) {
     system_fini();
@@ -64,6 +77,8 @@ cleanup:
 }
 
 void system_fini() {
+  release_blitter();
+
   struct Process* process = (struct Process*)FindTask(NULL);
   process->pr_WindowPtr = g.save_windowptr;
 
@@ -86,13 +101,18 @@ void system_fini() {
 void system_print_error(STRPTR msg) {
   // DOS needs task switching to handle Write request.
   // Console needs blitter to draw text.
-  if (DOSBase && (! g.task_switch_disabled) && (! g.blitter_owned)) {
+  if (DOSBase && (! g.task_switch_disabled)) {
+    // Let OS temporarily use blitter to draw into console.
+    release_blitter();
+
     STRPTR out_strs[] = {"modsurfer: assert(", msg, ") failed\n"};
     BPTR out_handle = Output();
 
     for (UWORD i = 0; i < ARRAY_NELEMS(out_strs); ++ i) {
       Write(out_handle, out_strs[i], string_length(out_strs[i]));
     }
+
+    acquire_blitter();
   }
 }
 
@@ -128,6 +148,76 @@ cleanup:
   }
 
   return status;
+}
+
+Status system_add_input_handler(APTR handler_func,
+                                APTR handler_data) {
+  Status status = StatusOK;
+
+  ASSERT(g.input_port = CreatePort(NULL, 0));
+  ASSERT(g.input_io = (struct IOStdReq*)CreateExtIO(g.input_port, sizeof(struct IOStdReq)));
+  ASSERT(OpenDevice("input.device", 0, (struct IORequest*)g.input_io, 0) == 0);
+  g.input_opened = TRUE;
+
+  ASSERT(g.input_handler = (struct Interrupt*)AllocMem(sizeof(struct Interrupt), MEMF_CLEAR));
+  g.input_handler->is_Node.ln_Pri = 100;
+  g.input_handler->is_Node.ln_Name = "ModSurfer";
+  g.input_handler->is_Code = handler_func;
+  g.input_handler->is_Data = handler_data;
+
+  g.input_io->io_Data = (APTR)g.input_handler;
+  g.input_io->io_Command = IND_ADDHANDLER;
+  ASSERT(DoIO((struct IORequest*)g.input_io) == 0);
+  g.input_handler_added = TRUE;
+
+cleanup:
+  return status;
+}
+
+void system_remove_input_handler() {
+  if (g.input_handler_added) {
+    g.input_io->io_Data = g.input_handler;
+    g.input_io->io_Command = IND_REMHANDLER;
+    g.input_handler_added = FALSE;
+    DoIO((struct IORequest*)g.input_io);
+  }
+
+  if (g.input_handler) {
+    FreeMem(g.input_handler, sizeof(struct Interrupt));
+    g.input_handler = NULL;
+  }
+
+  if (g.input_opened) {
+    CloseDevice((struct IORequest*)g.input_io);
+    g.input_opened = FALSE;
+  }
+
+  if (g.input_io) {
+    DeleteExtIO((struct IORequest*)g.input_io);
+    g.input_io = NULL;
+  }
+
+  if (g.input_port) {
+    DeletePort(g.input_port);
+    g.input_port = NULL;
+  }
+}
+
+void system_load_view(struct View* view) {
+  g.save_view = GfxBase->ActiView;
+  g.save_copinit = GfxBase->copinit;
+
+  LoadView(view);
+}
+
+void system_unload_view() {
+  if (g.save_view) {
+    custom.cop1lc = (ULONG)g.save_copinit;
+    LoadView(g.save_view);
+
+    g.save_view = NULL;
+    g.save_copinit = NULL;
+  }
 }
 
 Status system_list_drives(dirlist_t* drives) {
@@ -226,18 +316,8 @@ void system_acquire_control() {
   g.save_copcon = custom.copcon;
   custom.copcon = COPCON_CDANG;
 
-  // Save active view/copperlist and load our copperlist.
-  g.save_view = GfxBase->ActiView;
-  g.save_copinit = GfxBase->copinit;
-  LoadView(gfx_view());
-
-  // Wait for odd/even field copperlists to finish.
-  gfx_wait_vblank();
-  gfx_wait_vblank();
-
   // Save and enable DMA channels.
   g.save_dmacon = custom.dmaconr;
-  custom.dmacon = DMACON_CLEARALL;
   custom.dmacon = DMACON_SET | DMACON_DMAEN | DMACON_BPLEN | DMACON_COPEN | DMACON_BLTEN | DMACON_SPREN;
 
   // Save and clear interrupt state.
@@ -284,13 +364,8 @@ void system_release_control() {
   custom.intena = INTENA_CLEARALL;
   custom.intena = INTENA_SET | g.save_intena;
 
-  // Restore DMA channels.
-  custom.dmacon = DMACON_CLEARALL;
-  custom.dmacon = DMACON_SET | g.save_dmacon;
-
-  // Restore original view and copperlist.
-  custom.cop1lc = (ULONG)g.save_copinit;
-  LoadView(g.save_view);
+  // Disable any extra DMA channels we enabled.
+  custom.dmacon = g.save_dmacon & ~(DMACON_DMAEN | DMACON_BPLEN | DMACON_COPEN | DMACON_BLTEN | DMACON_SPREN);
 
   // Wait until copper-initiated blits have finished.
   gfx_wait_vblank();
@@ -298,6 +373,9 @@ void system_release_control() {
 
   // Restore copper access to blitter registers.
   custom.copcon = g.save_copcon;
+
+  // Restore primary copperlist pointer.
+  custom.cop1lc = (ULONG)g.save_copinit;
 
   // Enable task switching after control duration.
   allow_task_switch(TRUE);
@@ -333,14 +411,14 @@ static void set_intreq(UWORD intreq) {
   }
 }
 
-void system_acquire_blitter() {
+static void acquire_blitter() {
   if (! g.blitter_owned) {
     g.blitter_owned = TRUE;
     OwnBlitter();
   }
 }
 
-void system_release_blitter() {
+static void release_blitter() {
   if (g.blitter_owned) {
     g.blitter_owned = FALSE;
     DisownBlitter();

@@ -61,6 +61,7 @@ Status game_main_loop() {
     // Only redraw menu if we left it (started the game successfully).
     if (status == StatusOK) {
       ASSERT(menu_redraw());
+      gfx_setup_copperlist(TRUE);
       gfx_fade_menu(TRUE);
     }
 
@@ -78,11 +79,10 @@ Status game_main_loop() {
       CATCH(track_build(), StatusOutOfMemory);
     }
 
-    system_acquire_blitter();
-
     if (status == StatusOK) {
       // Exit the menu and start the game.
       gfx_fade_menu(FALSE);
+      gfx_setup_copperlist(FALSE);
       game_play_loop();
 
       track_free();
@@ -91,12 +91,9 @@ Status game_main_loop() {
       // Stay on menu and report the error.
       menu_redraw_button((status == StatusInvalidMod) ? "INVALID MOD FILE" : "NOT ENOUGH CHIP RAM");
     }
-
-    system_release_blitter();
   }
 
 cleanup:
-  system_release_blitter();
   track_free();
 
   return status;

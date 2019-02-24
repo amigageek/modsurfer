@@ -3,13 +3,11 @@
 #include "build/ball.h"
 #include "build/images.h"
 #include "custom.h"
-#include "menu.h"
 #include "module.h"
+#include "system.h"
 
-#include <graphics/gfxmacros.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
-#include <proto/intuition.h>
 #include <stddef.h>
 
 #define kDispWinX 0x81
@@ -21,7 +19,7 @@
 #define kDispFetchExtraWord 0x1 // extra word fetched for horizontal scrolling
 #define kDrawHeight ((4 * kDispHeight) / 5)
 #define kDrawTop (kDispHeight - kDrawHeight)
-#define kDispCopListSizeW (388 + ((kDrawHeight + 1) * 20))
+#define kDispCopListSizeW (400 + ((kDrawHeight + 1) * 20))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 5
@@ -51,9 +49,6 @@ extern void update_coplist(UWORD* colors __asm("a2"),
                            ULONG z __asm("d6"),
                            ULONG loop_counts __asm("d7"));
 
-static void make_bitmap();
-static Status make_screen();
-static Status make_window();
 static Status make_copperlists();
 static UWORD* make_copperlist_score(UWORD* cl);
 static Status make_view();
@@ -69,16 +64,15 @@ static void update_sprite_colors(UWORD* cop_list,
                                  ULONG camera_z);
 
 static struct {
-  struct BitMap bitmap;
-  struct Screen* screen;
-  struct Window* window;
-  struct cprlist cpr_list;
   UWORD cop_list_back;
   UWORD cop_list_spr_color_idx;
+  UWORD cop_list_menu_end_idx;
   UWORD cop_list_rows_start;
   UWORD cop_list_rows_end;
   UWORD cop_list_score_idx;
+  struct cprlist cpr_list;
   struct View view;
+  struct ViewPort viewport;
   UWORD z_incs[kDrawHeight];
   UWORD colors[kFadeActionNumColors];
 } g;
@@ -93,90 +87,11 @@ static UWORD null_spr[2] __chip_bss;
 Status gfx_init() {
   Status status = StatusOK;
 
-  make_bitmap();
-  ASSERT(make_screen());
-  ASSERT(make_window());
   ASSERT(make_copperlists());
   ASSERT(make_view());
   make_z_incs();
 
-cleanup:
-  return status;
-}
-
-static void make_bitmap() {
-  g.bitmap = (struct BitMap) {
-    .BytesPerRow = kDispStride,
-    .Rows = kDispHeight,
-    .Flags = 0,
-    .Depth = kDispDepth,
-    .pad = 0,
-  };
-
-  for (UWORD i = 0; i < kDispDepth; ++ i) {
-    g.bitmap.Planes[i] = (PLANEPTR)&disp_planes[i][0][0];
-  }
-}
-
-static Status make_screen() {
-  Status status = StatusOK;
-
-  struct NewScreen new_screen = {
-    .LeftEdge = 0,
-    .TopEdge = 0,
-    .Width = kDispWidth,
-    .Height = kDispHeight,
-    .Depth = kDispDepth,
-    .DetailPen = 0,
-    .BlockPen = 0,
-    .ViewModes = 0,
-    .Type = CUSTOMSCREEN | CUSTOMBITMAP | SCREENQUIET,
-    .Font = NULL,
-    .DefaultTitle = NULL,
-    .Gadgets = NULL,
-    .CustomBitMap = &g.bitmap,
-  };
-
-  ASSERT(g.screen = OpenScreen(&new_screen));
-
-  ShowTitle(g.screen, FALSE);
-
-  UWORD palette[1 << kDispDepth] = {0, 0, 0, 0, 0, kHeaderPalette};
-  LoadRGB4(&g.screen->ViewPort, palette, ARRAY_NELEMS(palette));
-  SetRGB4(&g.screen->ViewPort, 17, 0, 0, 0);
-
-cleanup:
-  return status;
-}
-
-static Status make_window() {
-  Status status = StatusOK;
-
-  struct NewWindow new_window = {
-    .LeftEdge = 0,
-    .TopEdge = 0,
-    .Width = kDispWidth,
-    .Height = kDispHeight,
-    .DetailPen = 0,
-    .BlockPen = 0,
-    .IDCMPFlags = IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_DISKREMOVED,
-    .Flags = WFLG_SUPER_BITMAP | WFLG_BACKDROP | WFLG_BORDERLESS
-           | WFLG_ACTIVATE | WFLG_RMBTRAP | WFLG_REPORTMOUSE,
-    .FirstGadget = NULL,
-    .CheckMark = NULL,
-    .Title = NULL,
-    .Screen = g.screen,
-    .BitMap = &g.bitmap,
-    .MinWidth = kDispWidth,
-    .MinHeight = kDispHeight,
-    .MaxWidth = kDispWidth,
-    .MaxHeight = kDispHeight,
-    .Type = CUSTOMSCREEN,
-  };
-
-  ASSERT(g.window = OpenWindow(&new_window));
-
-  SetPointer(g.window, pointer_planes, kPtrSprEdge, kPtrSprEdge, kPtrSprOffX, kPtrSprOffY);
+  system_load_view(&g.view);
 
 cleanup:
   return status;
@@ -196,7 +111,13 @@ static Status make_copperlists() {
     *(cl ++) = WORD_LO(null_spr);
   }
 
-  // Header palette is shared with main screen, colors 5-7.
+  // Begin with colors 0-4 set to zero, for menu fade-in.
+  for (UWORD i = 0; i < 5; ++ i) {
+    *(cl ++) = CUSTOM_OFFSET(color[i]);
+    *(cl ++) = 0;
+  }
+
+  // Header palette is shared between menu and game, colors 5-7.
   UWORD hdr_pal[] = {kHeaderPalette};
 
   for (UWORD i = 0; i < ARRAY_NELEMS(hdr_pal); ++ i) {
@@ -253,6 +174,12 @@ static Status make_copperlists() {
   *(cl ++) = 0xFFFE;
   *(cl ++) = CUSTOM_OFFSET(bplcon0);
   *(cl ++) = BPLCON0_COLOR | (kDispDepth << BPLCON0_BPU_SHF);
+
+  // Delineates end of menu copperlist and continuation of game copperlist.
+  g.cop_list_menu_end_idx = cl - cop_lists[0];
+
+  *(cl ++) = 0x1;
+  *(cl ++) = 0xFFFE;
 
   // Begin with colors 1-7 black below header until copper changes them.
   *(cl ++) = ((kDispWinY + kDispHdrHeight - 2) << 8) | 0x1;
@@ -323,6 +250,9 @@ static Status make_copperlists() {
 
   // Copy the front copperlist we built to the back copperlist.
   CopyMem(cop_lists[0], cop_lists[1], sizeof(cop_lists[0]));
+
+  // Setup copperlist for menu initially.
+  gfx_setup_copperlist(TRUE);
 
 cleanup:
   return status;
@@ -425,11 +355,13 @@ static void make_z_incs() {
 static Status make_view() {
   Status status = StatusOK;
 
+  // View is always bound to the first copperlist.
+  // The second copperlist is only used inside the game.
   g.cpr_list.start = &cop_lists[0][0];
   g.cpr_list.MaxCount = kDispCopListSizeW / 2;
 
   InitView(&g.view);
-  g.view.ViewPort = &g.screen->ViewPort;
+  g.view.ViewPort = &g.viewport;
   g.view.LOFCprList = &g.cpr_list;
 
 cleanup:
@@ -437,27 +369,28 @@ cleanup:
 }
 
 void gfx_fini() {
-  if (g.window) {
-    CloseWindow(g.window);
-    g.window = NULL;
-  }
-
-  if (g.screen) {
-    CloseScreen(g.screen);
-    g.screen = NULL;
-  }
-}
-
-struct Window* gfx_window() {
-  return g.window;
+  system_unload_view();
 }
 
 UBYTE* gfx_display_planes() {
   return (UBYTE*)disp_planes;
 }
 
-struct View* gfx_view() {
-  return &g.view;
+void gfx_setup_copperlist(BOOL for_menu) {
+  UWORD* cl = cop_lists[0];
+
+  if (for_menu) {
+    // Set up pointer sprite and disable others.
+    for (UWORD spr_idx = 0; spr_idx < 4; ++ spr_idx) {
+      APTR spr_addr = (spr_idx == 0) ? pointer_planes : null_spr;
+
+      cl[1 + (spr_idx * 4)] = WORD_HI(spr_addr);
+      cl[3 + (spr_idx * 4)] = WORD_LO(spr_addr);
+    }
+  }
+
+  // Insert copperlist terminator in menu mode, otherwise pass.
+  cl[g.cop_list_menu_end_idx] = for_menu ? 0xFFFF : 0x1;
 }
 
 void gfx_draw_text(STRPTR text,
@@ -528,8 +461,6 @@ void gfx_init_score() {
 
 void gfx_fade_menu(BOOL fade_in) {
   // Menu body (below header) uses colors 1-4, mouse pointer uses color 18.
-  static UWORD color_indices[kFadeMenuNumColors] = {1, 2, 3, 4, 18};
-
   UWORD colors_lo[kFadeMenuNumColors] = {0x000};
   UWORD colors_hi[kFadeMenuNumColors] = {0x425, 0xB4C, 0xB8C, 0x5C5, 0xDB9};
   UWORD* colors = fade_in ? colors_lo : colors_hi;
@@ -538,10 +469,11 @@ void gfx_fade_menu(BOOL fade_in) {
   for (BOOL fading = TRUE; fading; ) {
     fading = fade_common(colors_lo, colors_hi, kFadeMenuNumColors, fade_in);
 
-    for (UWORD i = 0; i < kFadeMenuNumColors; ++ i) {
-      UWORD color = colors[i];
-      SetRGB4(&g.screen->ViewPort, color_indices[i], color >> 8, (color >> 4) & 0xF, color & 0xF);
+    for (UWORD i = 0; i < 4; ++ i) {
+      cop_lists[0][35 + (i * 2)] = colors[i];
     }
+
+    cop_lists[0][g.cop_list_spr_color_idx + 5] = colors[4];
 
     for (UWORD i = 0; i < 2; ++ i) {
       WaitTOF();
@@ -689,6 +621,20 @@ void gfx_draw_track() {
     // Fill between the lines in each plane.
     blit_fill(plane, kDispStride, 0, kDrawTop, kDispStride * kBitsPerByte, kDrawHeight);
   }
+}
+
+void gfx_update_pointer(UWORD pointer_x,
+                        UWORD pointer_y) {
+  UWORD hstart = (kDispWinX & ~1) + (pointer_x + kPtrSprOffX);
+  UWORD vstart = kDispWinY + (pointer_y + kPtrSprOffY);
+  UWORD vstop = vstart + kPtrSprEdge;
+
+  pointer_planes[0] = ((vstart & 0xFF) << SPRxPOS_SV0_SHF)
+                    | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_SHF);
+  pointer_planes[1] = ((vstop & 0xFF) << SPRxCTL_EV0_SHF)
+                    | ((vstart >> 8) << SPRxCTL_SV8_SHF)
+                    | ((vstop >> 8) << SPRxCTL_EV8_SHF)
+                    | ((hstart & 0x1) << SPRxCTL_SH0_SHF);;
 }
 
 void gfx_update_display(TrackStep *step_near,
