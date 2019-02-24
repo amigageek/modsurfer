@@ -226,7 +226,7 @@ static Status make_copperlists() {
   *(cl ++) = kDispFetchStop;
 
   for (UWORD i = 0; i < kDispDepth; ++ i) {
-    ULONG plane_start = (ULONG)&disp_planes[i][0][0] - kDispFetchExtraWord;
+    ULONG plane_start = (ULONG)&disp_planes[i][0][0] - (kDispFetchExtraWord * kBytesPerWord);
 
     *(cl ++) = CUSTOM_OFFSET(bplpt[i]);
     *(cl ++) = WORD_HI(plane_start);
