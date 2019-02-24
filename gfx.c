@@ -577,7 +577,7 @@ void gfx_fade_menu(BOOL fade_in) {
     }
 
     for (UWORD i = 0; i < 2; ++ i) {
-      gfx_wait_vblank();
+      WaitTOF();
     }
   }
 }
