@@ -55,7 +55,6 @@ static void make_bitmap();
 static Status make_screen();
 static Status make_window();
 static Status make_copperlists();
-static void get_display_window(struct ViewPort* viewport, UWORD* diwstrt, UWORD* diwstop, UWORD* diwhigh);
 static UWORD* make_copperlist_score(UWORD* cl);
 static Status make_view();
 static void make_z_incs();
@@ -186,14 +185,6 @@ cleanup:
 static Status make_copperlists() {
   Status status = StatusOK;
 
-  // Attempt to match display window with our screen, to minimize flicker.
-  // Fall back to a set of safe values otherwise.
-  UWORD diwstrt = (kDispWinY << DIWSTRT_V0_SHF) | kDispWinX;
-  UWORD diwstop = ((kDispWinY + kDispHeight - 0x100) << DIWSTOP_V0_SHF) | (kDispWinX + kDispWidth - 0x100);
-  UWORD diwhigh = (1 << DIWHIGH_H10_SHF) | (1 << DIWHIGH_V8_SHF);
-
-  get_display_window(&g.screen->ViewPort, &diwstrt, &diwstop, &diwhigh);
-
   // Build the first copperlist; the second will be a copy.
   UWORD* cl = cop_lists[0];
 
@@ -223,11 +214,11 @@ static Status make_copperlists() {
 
   // Display parameters and bitplanes.
   *(cl ++) = CUSTOM_OFFSET(diwstrt);
-  *(cl ++) = diwstrt;
+  *(cl ++) = (kDispWinY << DIWSTRT_V0_SHF) | kDispWinX;
   *(cl ++) = CUSTOM_OFFSET(diwstop);
-  *(cl ++) = diwstop;
+  *(cl ++) = ((kDispWinY + kDispHeight - 0x100) << DIWSTOP_V0_SHF) | (kDispWinX + kDispWidth - 0x100);
   *(cl ++) = CUSTOM_OFFSET(diwhigh);
-  *(cl ++) = diwhigh;
+  *(cl ++) = (1 << DIWHIGH_H10_SHF) | (1 << DIWHIGH_V8_SHF);
 
   *(cl ++) = CUSTOM_OFFSET(ddfstrt);
   *(cl ++) = kDispFetchStart;
@@ -335,36 +326,6 @@ static Status make_copperlists() {
 
 cleanup:
   return status;
-}
-
-static void get_display_window(struct ViewPort* viewport,
-                               UWORD* diwstrt,
-                               UWORD* diwstop,
-                               UWORD* diwhigh) {
-  struct CopList* cop_list = viewport->DspIns;
-
-  for (UWORD i = 0; i < cop_list->Count; ++ i) {
-    struct CopIns* cop_ins = &cop_list->CopIns[i];
-
-    if (cop_ins->OpCode == 0) {
-      UWORD addr = cop_ins->u3.u4.u1.DestAddr & 0xFFF;
-      UWORD data = cop_ins->u3.u4.u2.DestData;
-
-      switch (addr) {
-      case CUSTOM_OFFSET(diwstrt):
-        *diwstrt = data;
-        break;
-
-      case CUSTOM_OFFSET(diwstop):
-        *diwstop = data;
-        break;
-
-      case CUSTOM_OFFSET(diwhigh):
-        *diwhigh = data;
-        break;
-      }
-    }
-  }
 }
 
 static UWORD* make_copperlist_score(UWORD* cl) {
