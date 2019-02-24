@@ -29,6 +29,7 @@ struct IntuitionBase* IntuitionBase;
 
 static struct {
   BOOL wb_closed;
+  APTR save_windowptr;
   BOOL task_switch_disabled;
   BOOL blitter_owned;
   UWORD save_copcon;
@@ -48,6 +49,12 @@ Status system_init() {
 
   g.wb_closed = CloseWorkBench();
 
+  // Suppress error requesters triggered by I/O.
+  // We will control the display/input and user cannot respond to them.
+  struct Process* process = (struct Process*)FindTask(NULL);
+  g.save_windowptr = process->pr_WindowPtr;
+  process->pr_WindowPtr = (APTR)-1;
+
 cleanup:
   if (status != StatusOK) {
     system_fini();
@@ -57,6 +64,9 @@ cleanup:
 }
 
 void system_fini() {
+  struct Process* process = (struct Process*)FindTask(NULL);
+  process->pr_WindowPtr = g.save_windowptr;
+
   if (g.wb_closed) {
     OpenWorkBench();
     g.wb_closed = FALSE;
