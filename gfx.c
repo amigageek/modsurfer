@@ -21,7 +21,7 @@
 #define kDispFetchExtraWord 0x1 // extra word fetched for horizontal scrolling
 #define kDrawHeight ((4 * kDispHeight) / 5)
 #define kDrawTop (kDispHeight - kDrawHeight)
-#define kDispCopListSizeW (384 + ((kDrawHeight + 1) * 20))
+#define kDispCopListSizeW (386 + ((kDrawHeight + 1) * 20))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 5
@@ -253,6 +253,8 @@ static Status make_copperlists() {
   *(cl ++) = BPLCON0_COLOR;
   *(cl ++) = CUSTOM_OFFSET(bplcon1);
   *(cl ++) = 0;
+  *(cl ++) = CUSTOM_OFFSET(bplcon3);
+  *(cl ++) = 1 << BPLCON3_SPRES_Shf;
 
   // Enable bitplane DMA at beginning of the display window.
   // The display window we calculated may be larger than the bitmap.
