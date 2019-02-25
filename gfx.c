@@ -629,12 +629,14 @@ void gfx_update_pointer(UWORD pointer_x,
   UWORD vstart = kDispWinY + (pointer_y + kPtrSprOffY);
   UWORD vstop = vstart + kPtrSprEdge;
 
-  pointer_planes[0] = ((vstart & 0xFF) << SPRxPOS_SV0_SHF)
-                    | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_SHF);
-  pointer_planes[1] = ((vstop & 0xFF) << SPRxCTL_EV0_SHF)
-                    | ((vstart >> 8) << SPRxCTL_SV8_SHF)
-                    | ((vstop >> 8) << SPRxCTL_EV8_SHF)
-                    | ((hstart & 0x1) << SPRxCTL_SH0_SHF);;
+  UWORD ctl_word0 = ((vstart & 0xFF) << SPRxPOS_SV0_SHF)
+                  | (((hstart >> 1) & 0xFF) << SPRxPOS_SH1_SHF);
+  UWORD ctl_word1 = ((vstop & 0xFF) << SPRxCTL_EV0_SHF)
+                  | ((vstart >> 8) << SPRxCTL_SV8_SHF)
+                  | ((vstop >> 8) << SPRxCTL_EV8_SHF)
+                  | ((hstart & 0x1) << SPRxCTL_SH0_SHF);;
+
+  *(ULONG *)pointer_planes = (ctl_word0 << kBitsPerWord) | ctl_word1;
 }
 
 void gfx_update_display(TrackStep *step_near,
