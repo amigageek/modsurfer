@@ -108,12 +108,14 @@ Status menu_init() {
 
   ASSERT(system_add_input_handler(input_handler, (APTR)&g.input_state));
 
+  system_acquire_blitter();
   gfx_draw_logo();
   gfx_init_score();
   gfx_update_pointer(g.input_state.mouse_x, g.input_state.mouse_y);
   ASSERT(refresh_file_list());
 
 cleanup:
+  system_release_blitter();
   return status;
 }
 
@@ -127,10 +129,12 @@ void menu_fini() {
 Status menu_redraw() {
   Status status = StatusOK;
 
+  system_acquire_blitter();
   gfx_clear_body();
   redraw_body();
   draw_frames();
   draw_footer_text();
+  system_release_blitter();
 
 cleanup:
   return status;
@@ -191,6 +195,7 @@ Status menu_event_loop() {
 
   while (status == StatusOK) {
     WaitTOF();
+    system_acquire_blitter();
 
     // Handle mouse movement events.
     if (g.input_state.mouse_x != last_mouse_x ||
@@ -224,6 +229,8 @@ Status menu_event_loop() {
     if (g.input_state.escape_pressed) {
       status = StatusQuit;
     }
+
+    system_release_blitter();
   }
 
   if (status == StatusPlay) {
@@ -231,6 +238,8 @@ Status menu_event_loop() {
   }
 
 cleanup:
+  system_release_blitter();
+
   return status;
 }
 
@@ -239,6 +248,7 @@ static Status refresh_file_list() {
 
   dirlist_free(&g.file_list);
 
+  system_release_blitter();
   CATCH(system_list_path(g.dir_path, &g.file_list), StatusInvalidPath);
 
   if (status == StatusInvalidPath) {
@@ -258,6 +268,8 @@ static Status refresh_file_list() {
   module_close();
 
 cleanup:
+  system_acquire_blitter();
+
   return status;
 }
 
@@ -398,7 +410,9 @@ static Status file_selected() {
   module_close();
   module_open(g.dir_path, file_name);
 
+  system_release_blitter();
   CATCH(module_load_header(), StatusInvalidMod);
+  system_acquire_blitter();
 
   if (status == StatusInvalidMod) {
     module_close();

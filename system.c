@@ -25,8 +25,6 @@ extern void level2_int();
 static void allow_task_switch(BOOL allow);
 static ULONG get_vbr();
 static void set_intreq(UWORD intreq);
-static void acquire_blitter();
-static void release_blitter();
 
 struct GfxBase* GfxBase;
 struct IntuitionBase* IntuitionBase;
@@ -64,10 +62,6 @@ Status system_init() {
   g.save_windowptr = process->pr_WindowPtr;
   process->pr_WindowPtr = (APTR)-1;
 
-  // Hold blitter for the lifetime of our process.
-  // Input and display are blocked so Intuition shouldn't mind.
-  acquire_blitter();
-
 cleanup:
   if (status != StatusOK) {
     system_fini();
@@ -77,8 +71,6 @@ cleanup:
 }
 
 void system_fini() {
-  release_blitter();
-
   struct Process* process = (struct Process*)FindTask(NULL);
   process->pr_WindowPtr = g.save_windowptr;
 
@@ -103,7 +95,7 @@ void system_print_error(STRPTR msg) {
   // Console needs blitter to draw text.
   if (DOSBase && (! g.task_switch_disabled)) {
     // Let OS temporarily use blitter to draw into console.
-    release_blitter();
+    system_release_blitter();
 
     STRPTR out_strs[] = {"modsurfer: assert(", msg, ") failed\n"};
     BPTR out_handle = Output();
@@ -112,7 +104,7 @@ void system_print_error(STRPTR msg) {
       Write(out_handle, out_strs[i], string_length(out_strs[i]));
     }
 
-    acquire_blitter();
+    system_acquire_blitter();
   }
 }
 
@@ -411,14 +403,14 @@ static void set_intreq(UWORD intreq) {
   }
 }
 
-static void acquire_blitter() {
+void system_acquire_blitter() {
   if (! g.blitter_owned) {
     g.blitter_owned = TRUE;
     OwnBlitter();
   }
 }
 
-static void release_blitter() {
+void system_release_blitter() {
   if (g.blitter_owned) {
     g.blitter_owned = FALSE;
     DisownBlitter();

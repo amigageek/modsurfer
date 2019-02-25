@@ -79,6 +79,8 @@ Status game_main_loop() {
       CATCH(track_build(), StatusOutOfMemory);
     }
 
+    system_acquire_blitter();
+
     if (status == StatusOK) {
       // Exit the menu and start the game.
       gfx_fade_menu(FALSE);
@@ -91,9 +93,12 @@ Status game_main_loop() {
       // Stay on menu and report the error.
       menu_redraw_button((status == StatusInvalidMod) ? "INVALID MOD FILE" : "NOT ENOUGH CHIP RAM");
     }
+
+    system_release_blitter();
   }
 
 cleanup:
+  system_release_blitter();
   track_free();
 
   return status;

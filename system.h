@@ -24,5 +24,7 @@ extern Status system_list_path(STRPTR path,
                                dirlist_t* entries);    // SystemError
 extern void system_acquire_control();
 extern void system_release_control();
+extern void system_acquire_blitter();
+extern void system_release_blitter();
 
 extern volatile UBYTE keyboard_state[kNumKeycodes];
