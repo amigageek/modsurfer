@@ -365,7 +365,7 @@ void system_release_control() {
   custom.intena = INTENA_SET | g.save_intena;
 
   // Disable any extra DMA channels we enabled.
-  custom.dmacon = g.save_dmacon & ~(DMACON_DMAEN | DMACON_BPLEN | DMACON_COPEN | DMACON_BLTEN | DMACON_SPREN);
+  custom.dmacon = g.save_dmacon ^ custom.dmaconr;
 
   // Wait until copper-initiated blits have finished.
   gfx_wait_vblank();
