@@ -25,8 +25,8 @@ typedef struct {
   UWORD pat_tbl_idx;
   UWORD div_idx;
   UWORD div_start_idx;
-  UWORD loop_idx;
-  UWORD loop_count;
+  UWORD loop_idx[4];
+  UWORD loop_count[4];
   UWORD active_contiguous_count;
   UWORD last_active_lane;
 } BuildState;
@@ -373,8 +373,11 @@ static Status walk_pattern(UWORD pat_idx,
   Pattern* pat = &nonchip->patterns[pat_idx];
 
   ULONG select_samples = g.pat_select_samples[pat_idx];
-  state->loop_idx = 0;
-  state->loop_count = -1;
+
+  for (UWORD i = 0; i < 4; ++ i) {
+    state->loop_idx[i] = 0;
+    state->loop_count[i] = -1;
+  }
 
   // Begin from division specified by the previous jump, or 0 otherwise.
   state->div_idx = state->div_start_idx;
@@ -506,18 +509,18 @@ Status handle_commands(PatternDivision* div,
         UWORD cmd_count = effect & 0xF;
 
         if (cmd_count == 0) {
-          state->loop_idx = state->div_idx;
+          state->loop_idx[cmd_idx] = state->div_idx;
         }
-        else if (state->loop_count == 0) {
-          state->loop_count = -1;
+        else if (state->loop_count[cmd_idx] == 0) {
+          state->loop_count[cmd_idx] = -1;
         }
         else {
-          if (state->loop_count == (UWORD)-1) {
-            state->loop_count = cmd_count;
+          if (state->loop_count[cmd_idx] == (UWORD)-1) {
+            state->loop_count[cmd_idx] = cmd_count;
           }
 
-          -- state->loop_count;
-          next_div_idx = state->loop_idx;
+          -- state->loop_count[cmd_idx];
+          next_div_idx = state->loop_idx[cmd_idx];
         }
 
         break;
