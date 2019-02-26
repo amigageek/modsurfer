@@ -54,7 +54,7 @@ dist: $(MODSURFER)
 	rm -fr $(DISTDIR)
 	mkdir -p $(DISTDIR)/ModSurfer/Source
 	cp $(MODSURFER) extra/ModSurfer.info extra/ModSurfer.adf.info extra/ReadMe* $(DISTDIR)/ModSurfer
-	cp -r *.c *.h *.asm LICENSE ReadMe extra images ptplayer $(DISTDIR)/ModSurfer/Source/
+	cp -r *.c *.h *.asm LICENSE Makefile ReadMe extra images ptplayer $(DISTDIR)/ModSurfer/Source/
 	cp extra/Drawer.info $(DISTDIR)/ModSurfer.info
 	cp extra/Source.info $(DISTDIR)/ModSurfer/Source.info
 	cp extra/SourceReadMe.info $(DISTDIR)/ModSurfer/Source/ReadMe.info
