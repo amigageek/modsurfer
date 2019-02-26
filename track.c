@@ -20,6 +20,8 @@
 #define kPitchTarget 3000
 #define kScoreCountWeight 0x100
 #define kScorePitchWeight 2
+#define kDefaultBeatsPerMin 125
+#define kDefaultTicksPerDiv 6
 
 typedef struct {
   UWORD pat_tbl_idx;
@@ -29,6 +31,10 @@ typedef struct {
   UWORD loop_count[4];
   UWORD active_contiguous_count;
   UWORD last_active_lane;
+  UWORD since_last_active;
+  UWORD beats_per_min;
+  UWORD ticks_per_div;
+  UWORD speed;
 } BuildState;
 
 static void select_samples();
@@ -344,7 +350,11 @@ static Status walk_pattern_table() {
   }
 
   // Walk through the pattern table, starting from the first entry.
-  BuildState state = {0};
+  BuildState state = {
+    .beats_per_min = kDefaultBeatsPerMin,
+    .ticks_per_div = kDefaultTicksPerDiv,
+    .speed = (kDefaultBeatsPerMin << 8) / kDefaultTicksPerDiv,
+  };
 
   for (state.pat_tbl_idx = 0; state.pat_tbl_idx < nonchip->header.pat_tbl_size; ) {
     UWORD pat_idx = nonchip->header.pat_tbl[state.pat_tbl_idx];
@@ -447,8 +457,15 @@ Status make_step(PatternDivision* div,
       random4 = 0;
     }
 
-    if (state->active_contiguous_count && (state->last_active_lane != 2) && (random4 == 3)) {
+    if ((random4 == 3) && (state->last_active_lane != 2) && state->active_contiguous_count) {
       // Avoid left-right and right-left lane changes in contiguous segments.
+      random4 = 0;
+    }
+
+    // Avoid left-right and right-left lane changes without a reasonable gap.
+    // Only apply when the speed is above a threshold
+    if ((random4 == 3) && (state->speed > 12000) &&
+        (state->last_active_lane != 2) && (state->since_last_active < 3)) {
       random4 = 0;
     }
 
@@ -459,12 +476,15 @@ Status make_step(PatternDivision* div,
       state->active_contiguous_count = 0;
     }
 
+    state->since_last_active = 0;
     ++ state->active_contiguous_count;
     ++ g.track_num_blocks;
   }
   else {
     state->active_contiguous_count = 0;
   }
+
+  ++ state->since_last_active;
 
   CATCH(vector_append(&g.track_steps, 1, &step), 0);
 
@@ -527,12 +547,29 @@ Status handle_commands(PatternDivision* div,
       }
       }
 
-    case kEffectSetSpeed:
-      if ((effect & 0xFF) == 0) {
+      break;
+
+    case kEffectSetSpeed: {
+      UWORD speed = effect & 0xFF;
+
+      if (speed == 0) {
         // Speed 0 indicates the end of the track.
         state->pat_tbl_idx = nonchip->header.pat_tbl_size;
         next_div_idx = kDivsPerPattern;
       }
+      else {
+        if (speed <= 0x20) {
+          state->ticks_per_div = speed;
+        }
+        else {
+          state->beats_per_min = speed;
+          while (state->beats_per_min >= 240);
+        }
+
+        // Calculate speed in arbitrary units, fixed point division into 16 bits.
+        state->speed = (state->beats_per_min << 8) / state->ticks_per_div;
+      }
+    }
     }
   }
 
