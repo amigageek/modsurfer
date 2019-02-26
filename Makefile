@@ -48,7 +48,6 @@ $(shell mkdir -p $(BUILDDIR)/ptplayer >/dev/null)
 all: $(MODSURFER)
 
 clean:
-	rm -fr $(BUILDDIR)
 	rm -fr $(BUILDDIR) $(DISTDIR)
 
 dist: $(MODSURFER)

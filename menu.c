@@ -573,8 +573,6 @@ static void redraw_slider(BOOL force_redraw) {
 
   UWORD color = (g.slider_drag_start_offset >= 0) ? kLightPen : kFramePen;
 
-  static UWORD count = 0; // FIXME
-
   if (color != last_color) {
     // Color changed: clear and redraw the slider region.
     clear_planes = last_color & (~color);

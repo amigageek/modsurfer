@@ -143,7 +143,7 @@ vec2 tex_rotate(vec2 uv,
 float checker_pattern(float x,
                       float y) {
   float x_frac = fraction(x);
-  return fraction(y + (x_frac <= 0.5f ? 0.0f : 0.5f)); // FIXME: < 0.5f
+  return fraction(y + (x_frac <= 0.5f ? 0.0f : 0.5f));
 }
 
 float fraction(float n) {
