@@ -14,13 +14,15 @@ music going. Miss a tile and the instrument won't play, making a right mess
 of the music!
 
 Use the file browser to select a MOD file and click the Start Game button.
-Move left/right with the mouse. You can exit a track early by pressing
-the Escape key. You can also return to Workbench from the menu with the
-Escape key.
+Move left/right with the mouse. Joystick and keyboard (A and D) are also
+supported but a mouse is highly recommended. You can exit a track early
+by pressing the Escape key. You can also return to Workbench from the menu
+with the Escape key.
 
 This game can be run from a hard disk after unpacking the archive. If you
 prefer to play from floppy, or have limited RAM, there is a bootable ADF
-image included in the archive. Larger MODs may require more chip RAM to load.
+image included in the archive. ModSurfer will run on any Amiga at 50 FPS.
+Larger MODs may require more chip RAM to load.
 
 No MOD collection? Not a problem! You can find a set of curated MOD files
 in LHA and ADF format at the URL below. The fast tracks are guaranteed to
