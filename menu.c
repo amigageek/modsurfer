@@ -222,6 +222,7 @@ Status menu_event_loop() {
     if (g.input_state.disk_removed) {
       g.input_state.disk_removed = FALSE;
 
+      string_copy(g.dir_path, "");
       ASSERT(refresh_file_list());
       redraw_body();
     }
@@ -262,6 +263,7 @@ static Status refresh_file_list() {
   UWORD num_entries = dirlist_size(&g.file_list);
 
   g.fl_entry_offset = 0;
+  g.fl_entry_selected = -1;
   g.slider_offset = 0;
   g.slider_height = (kSliderMaxHeight * kTableNumRows) / MAX(kTableNumRows, num_entries);
 
@@ -592,15 +594,15 @@ static void redraw_slider(BOOL force_redraw) {
   else if (g.slider_offset != last_offset) {
     if (g.slider_offset < last_offset) {
       // Moved up: clear old bottom region, draw new top region.
-      clear_top = kSliderTop + g.slider_offset + g.slider_height;
-      clear_height = draw_height = last_offset - g.slider_offset;
+      clear_top = kSliderTop + MAX(last_offset, g.slider_offset + g.slider_height);
+      clear_height = draw_height = MIN(g.slider_height, last_offset - g.slider_offset);
       draw_top = kSliderTop + g.slider_offset;
     }
     else {
       // Moved down: clear old top region, draw new bottom region.
       clear_top = kSliderTop + last_offset;
-      clear_height = draw_height = g.slider_offset - last_offset;
-      draw_top = kSliderTop + last_offset + g.slider_height;
+      clear_height = draw_height = MIN(g.slider_height, g.slider_offset - last_offset);
+      draw_top = kSliderTop + MAX(g.slider_offset, last_offset + g.slider_height);
     }
 
     draw_planes = clear_planes = color;
