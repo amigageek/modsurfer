@@ -5,7 +5,7 @@ Type:         game/misc
 Architecture: m68k-amigaos >= 1.2
 Requires:     OCS PAL, 68000, 512K, or better
 URL:          https://amigageek.com/modsurfer
-Version:      1.0
+Version:      1.1
 
 ModSurfer is a rhythm game inspired by the PC title AudioSurf. Select a
 MOD music file from your collection and a 3D track will created for you
@@ -42,3 +42,10 @@ ptplayer MOD replayer library (mus/play/ptplayer), without which this project
 would not have been possible.
 
 https://github.com/amigageek/modsurfer
+
+Changes:
+
+1.1
+---
+
+- Program FMODE and BPLCON4 for compatibility.

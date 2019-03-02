@@ -19,7 +19,7 @@
 #define kDispFetchExtraWord 0x1 // extra word fetched for horizontal scrolling
 #define kDrawHeight ((4 * kDispHeight) / 5)
 #define kDrawTop (kDispHeight - kDrawHeight)
-#define kDispCopListSizeW (400 + ((kDrawHeight + 1) * 20))
+#define kDispCopListSizeW (404 + ((kDrawHeight + 1) * 20))
 #define kHeaderTextTop (logo_height + ((kDispHdrHeight - logo_height - kFontHeight) / 2))
 #define kHeaderTextGap 60
 #define kHeaderTextPen 5
@@ -145,6 +145,11 @@ static Status make_copperlists() {
   *(cl ++) = kDispFetchStart;
   *(cl ++) = CUSTOM_OFFSET(ddfstop);
   *(cl ++) = kDispFetchStop;
+
+  *(cl ++) = CUSTOM_OFFSET(bplcon4);
+  *(cl ++) = 0x11;
+  *(cl ++) = CUSTOM_OFFSET(fmode);
+  *(cl ++) = 0;
 
   for (UWORD i = 0; i < kDispDepth; ++ i) {
     ULONG plane_start = (ULONG)&disp_planes[i][0][0] - (kDispFetchExtraWord * kBytesPerWord);
