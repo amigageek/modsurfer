@@ -26,5 +26,6 @@ extern void system_acquire_control();
 extern void system_release_control();
 extern void system_acquire_blitter();
 extern void system_release_blitter();
+extern BOOL system_is_rtg();
 
 extern volatile UBYTE keyboard_state[kNumKeycodes];

@@ -365,6 +365,10 @@ static Status make_view() {
   g.cpr_list.start = &cop_lists[0][0];
   g.cpr_list.MaxCount = kDispCopListSizeW / 2;
 
+  InitVPort(&g.viewport);
+  g.viewport.DWidth = kDispWidth;
+  g.viewport.DHeight = kDispHeight;
+
   InitView(&g.view);
   g.view.ViewPort = &g.viewport;
   g.view.LOFCprList = &g.cpr_list;

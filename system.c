@@ -42,7 +42,6 @@ static struct {
   UWORD save_copcon;
   UWORD save_dmacon;
   struct View* save_view;
-  struct copinit* save_copinit;
   UWORD save_intena;
   UWORD save_intreq;
   ULONG save_vbr_lvl2;
@@ -54,7 +53,9 @@ Status system_init() {
   ASSERT(GfxBase = (struct GfxBase*)OpenLibrary("graphics.library", kLibVerKick1));
   ASSERT(IntuitionBase = (struct IntuitionBase*)OpenLibrary("intuition.library", kLibVerKick1));
 
-  g.wb_closed = CloseWorkBench();
+  if (! system_is_rtg()) {
+    g.wb_closed = CloseWorkBench();
+  }
 
   // Suppress error requesters triggered by I/O.
   // We will control the display/input and user cannot respond to them.
@@ -197,18 +198,21 @@ void system_remove_input_handler() {
 
 void system_load_view(struct View* view) {
   g.save_view = GfxBase->ActiView;
-  g.save_copinit = GfxBase->copinit;
+
+  // Not sure if this helps RTG.
+  LoadView(NULL);
+  WaitTOF();
+  WaitTOF();
 
   LoadView(view);
+  WaitTOF();
+  WaitTOF();
 }
 
 void system_unload_view() {
   if (g.save_view) {
-    custom.cop1lc = (ULONG)g.save_copinit;
     LoadView(g.save_view);
-
     g.save_view = NULL;
-    g.save_copinit = NULL;
   }
 }
 
@@ -367,7 +371,7 @@ void system_release_control() {
   custom.copcon = g.save_copcon;
 
   // Restore primary copperlist pointer.
-  custom.cop1lc = (ULONG)g.save_copinit;
+  custom.cop1lc = (ULONG)GfxBase->copinit;
 
   // Enable task switching after control duration.
   allow_task_switch(TRUE);
@@ -415,4 +419,21 @@ void system_release_blitter() {
     g.blitter_owned = FALSE;
     DisownBlitter();
   }
+}
+
+BOOL system_is_rtg() {
+  BOOL is_rtg = FALSE;
+
+  if (GfxBase->LibNode.lib_Version >= kLibVerKick3) {
+    struct Screen* wb_screen = LockPubScreen("Workbench");
+
+    if (wb_screen) {
+      ULONG bitmap_attrs = GetBitMapAttr(&wb_screen->BitMap, BMA_FLAGS);
+      is_rtg = (bitmap_attrs & BMF_STANDARD) == 0;
+
+      UnlockPubScreen(NULL, wb_screen);
+    }
+  }
+
+  return is_rtg;
 }
