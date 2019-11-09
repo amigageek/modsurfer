@@ -10,10 +10,10 @@
 #define kDivsPerPattern 0x40
 
 typedef struct {
-  UBYTE title[kModTitleMaxLen];
+  BYTE title[kModTitleMaxLen];
 
   struct {
-    UBYTE name[kSampleNameMaxLen];
+    BYTE name[kSampleNameMaxLen];
     UWORD length_w;
     UBYTE finetune;
     UBYTE volume;

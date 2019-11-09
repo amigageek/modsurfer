@@ -10,7 +10,7 @@ static Status read_nonchip(BPTR file, LONG file_size);
 static Status read_samples(BPTR file, LONG file_size);
 
 static struct {
-  UBYTE file_path[0x100];
+  BYTE file_path[0x100];
   ModuleHeader header;
   ModuleNonChip* nonchip;
   UWORD num_patterns;

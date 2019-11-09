@@ -173,7 +173,7 @@ void blit_line(APTR dst_base,
   custom.bltbmod = 4 * dmin;
   custom.bltcmod = dst_stride_b;
   custom.bltdmod = dst_stride_b;
-  custom.bltapt = (APTR)((4 * dmin) - (2 * dmax));
+  custom.bltapt = (APTR)(ULONG)((4 * dmin) - (2 * dmax));
   custom.bltcpt = (APTR)dst_start;
   custom.bltdpt = (APTR)dst_start;
   custom.bltsize = ((dmax + 1) << BLTSIZE_H0_SHF) | (0x2 << BLTSIZE_W0_SHF);

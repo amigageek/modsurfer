@@ -83,7 +83,7 @@ static void draw_footer_text();
 
 static struct {
   volatile InputState input_state;
-  UBYTE dir_path[0x100];
+  BYTE dir_path[0x100];
   dirlist_t file_list;
   UWORD fl_entry_offset;
   WORD fl_entry_hover;
@@ -636,7 +636,7 @@ static void redraw_slider(BOOL force_redraw) {
 
 static void redraw_mod_info() {
   ModuleHeader* header = module_is_open() ? module_header() : NULL;
-  gfx_draw_title(header ? header->title : (STRPTR)"SELECT A MOD");
+  gfx_draw_title(header ? header->title : (BYTE*)"SELECT A MOD");
 
   UBYTE* planes = gfx_display_planes();
 

@@ -45,7 +45,7 @@ UWORD string_length(STRPTR str) {
 
 void string_copy(STRPTR dst,
                  STRPTR src) {
-  while (*(dst ++) = *(src ++));
+  while ((*(dst ++) = *(src ++)));
 }
 
 void string_to_upper(STRPTR str) {

@@ -40,7 +40,7 @@
 // Defined in gfx.asm
 extern void update_coplist(UWORD* colors __asm("a2"),
                            UWORD* cop_row __asm("a3"),
-                           WORD* z_incs __asm("a4"),
+                           UWORD* z_incs __asm("a4"),
                            TrackStep* step_near __asm("a6"),
                            ULONG step_frac __asm("d3"),
                            ULONG shift_params __asm("d4"),

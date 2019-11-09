@@ -7,7 +7,7 @@
 int main() {
   printf("#include <exec/types.h>\n\n");
   printf("#define kFFTSizeLog2 %d\n", kFFTSizeLog2);
-  printf("#define kFFTSize (1 << (kFFTSizeLog2))\n\n", kFFTSizeLog2);
+  printf("#define kFFTSize (1 << (kFFTSizeLog2))\n\n");
   printf("static WORD FFTSinLUT[kFFTSize - (kFFTSize / 4)] = {");
 
   // Fixed-point sin() lookup table for FFT (3/4 of whole cycle).
@@ -46,7 +46,7 @@ int main() {
       printf("\n ");
     }
 
-    printf(" 0x%03hX,", reorder);
+    printf(" 0x%03hX,", (unsigned short)reorder);
   }
 
   printf("\n};\n");
